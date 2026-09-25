@@ -6,7 +6,7 @@
 
 ## 项目是什么
 
-- **包名**：`@sidleo3/dsh-plugins-plus`（v0.1.3）
+- **包名**：`@sidleo3/dsh-plugins-plus`（v0.1.4）
 - **仓库**：GitHub `sidleo/dsh-plugins-plus`（分支 `main`）
 - **组件**：`agent-instructions-plus`（替代 `agent-instructions`）、`skill-filesystem-plus`（替代 `skill-filesystem`）；命名规则 = 官方行 id + `-plus`
 - **核心行**：`dsh-plugins-plus` — 唯一常开行，持有配置 schema、接管引擎、只读状态接口
@@ -24,13 +24,13 @@
 | `src/core/registry.ts` | `dshPluginsPlus` 服务：配置快照、组件注册表、引擎钩子 |
 | `src/core/legacy.ts` | 旧插件 JSON 配置一次性导入 + 旧接管选择沿用（**只读，不改名不删除**） |
 | `src/core/hmr.ts` | 在 HMR 事务之外执行写盘（`hmr.executing.exit`，特性探测） |
-| `src/core/rpc.ts` | 只读 HTTP：`/api/dsh-plugins-plus/{status,roots,reconcile}` |
+| `src/core/rpc.ts` | 只读 HTTP：`/api/dsh-plugins-plus/{status,log,reconcile}`（`log` 返回 text/plain） |
 | `src/components/<组件>/index.ts` | 组件行：挂载即向核心注册自己（= 组件启用） |
 | `src/components/<组件>/preset.ts` | 会话平面：真正替代内置实现（技能 provider / 指令注入管线） |
 | `src/components/agent-instructions/{discovery,files,state,render,digest,config}.ts` | 从旧包移植的注入管线实现 |
 | `src/components/skill-filesystem/{provider,watcher,config}.ts` | 从旧包移植的发现实现 |
-| `src/client/index.ts` | 浏览器半：`settings.section` + `plugins.bundle.config` + `plugins.row.config`，读写全走 `ctx.configForms` |
-| `scripts/smoke.mjs` | 30 项自检：schema / 继承 / 规划器（幂等、还原、外来编辑、旧行改写）/ 迁移 / client 契约 |
+| `src/client/index.ts` | 浏览器半：`settings.section` + `plugins.bundle.config` + `plugins.row.config`，读写全走 `ctx.configForms`；页面只有配置，运行日志走页脚链接 |
+| `scripts/smoke.mjs` | 31 项自检：schema / 继承 / 规划器（幂等、还原、外来编辑、旧行改写）/ 迁移 / client 契约 |
 | `locale/` + `locale/<组件>/` | 插件页卡片与组件行的本地化标题/描述（`{"meta":{title,description}}`） |
 
 ## 常用命令
@@ -40,7 +40,7 @@ pnpm install --ignore-scripts
 pnpm resolve-types   # 从正在运行的 DSH 安装解析类型 → .dsh-types/tsconfig.paths.json
 pnpm typecheck       # 必须 0 错误
 pnpm build           # tsdown：5 个 ESM + 1 个 CJS client
-pnpm smoke           # 30 项检查，改规划器/迁移/client 后必跑
+pnpm smoke           # 31 项检查，改规划器/迁移/client 后必跑
 ```
 
 ## 架构要点
@@ -79,7 +79,7 @@ dsh --profile smoke --port 5399 --no-open     # 后台起，日志里取 token
 #   POST /api/settings/describe      {"args":{}}
 #   POST /api/settings/mutate        {"args":{"ns":"dsh-plugins-plus","ops":[…],"expectedRevision":N}}
 #   POST /api/pluginManager/setPluginEnabled {"args":{"id":"include:skill-filesystem-plus","enabled":false}}
-#   GET  /api/dsh-plugins-plus/status|roots      POST /api/dsh-plugins-plus/reconcile
+#   GET  /api/dsh-plugins-plus/status|log        POST /api/dsh-plugins-plus/reconcile
 ```
 
 请求体信封：`{"type":"client-request","rpcId":"…","method":"<ns>/<method>","payload":{"args":{…}}}`；先用 `?token=` 打开首页拿 cookie，否则 401。

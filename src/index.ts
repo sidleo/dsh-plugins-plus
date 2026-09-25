@@ -11,7 +11,8 @@
  *    mount/unmount, and on demand);
  *  - import the two standalone plugins' JSON settings and adopt the preset
  *    takeovers their wizards had written, exactly once;
- *  - answer the browser's read-only status and scan-root questions.
+ *  - answer the browser's read-only status questions and serve the engine's
+ *    run log (plain text, behind the configuration page's log link).
  *
  * @module @sidleo3/dsh-plugins-plus
  */
@@ -26,7 +27,6 @@ import { buildMigrationSeed } from './core/legacy.ts'
 import { PluginsPlusService } from './core/registry.ts'
 import { registerRoutes } from './core/rpc.ts'
 import { reconcile, type EngineDeps, type ReconcileReport } from './core/takeover.ts'
-import { computeRoots, resolveUserHome, type ProviderFs } from './components/skill-filesystem/provider.ts'
 
 export { Config }
 export type { PluginsPlusConfig } from './core/config.ts'
@@ -68,9 +68,16 @@ interface MigrationReport {
   readonly error?: string
 }
 
+/**
+ * How many engine passes the log keeps (newest first). The log is a diagnosis
+ * aid, not an audit trail: the profile patch on disk is the durable record.
+ */
+const PASS_HISTORY = 20
+
 /** The state the RPC surface reports. */
 interface BundleState {
-  lastReport?: ReconcileReport
+  /** Engine passes this process has run, newest first. */
+  history: ReconcileReport[]
   migration?: MigrationReport
   lastError?: string
 }
@@ -82,7 +89,7 @@ interface BundleState {
  */
 export function apply(ctx: Context, config: PluginsPlusConfig): void {
   const service = new PluginsPlusService(ctx, config)
-  const state: BundleState = {}
+  const state: BundleState = { history: [] }
 
   // We ship our own configuration pages, so the generic schema-derived form
   // must not also claim this entry. The policy is keyed by the fiber of the ROW
@@ -108,7 +115,7 @@ export function apply(ctx: Context, config: PluginsPlusConfig): void {
   ctx.inject(['webServer'], wctx => {
     const registered = registerRoutes(wctx, {
       status: () => statusOf(wctx, service, state),
-      roots: cwd => scanRoots(wctx, service, cwd),
+      log: async () => logText(service, state),
       reconcile: async () => {
         const report = await service.requestReconcileNow('manual')
         return { ok: true, report }
@@ -209,7 +216,8 @@ function startEngine(
           compositions = await readCompositions(ctx)
         }
         const report = await reconcile(deps, compositions, reason)
-        state.lastReport = report
+        state.history.unshift(report)
+        if (state.history.length > PASS_HISTORY) state.history.length = PASS_HISTORY
         state.lastError = undefined
         // A pass can still meet a busy profile lock; it is idempotent, so retry
         // a few times with backoff.
@@ -372,33 +380,49 @@ async function statusOf(ctx: Context, service: PluginsPlusService, state: Bundle
     config: snapshot,
     components,
     presets,
-    report: state.lastReport ?? null,
+    report: state.history[0] ?? null,
     migration: state.migration ?? null,
     error: state.lastError ?? null,
   }
 }
 
-/** Answer the scan-root preview for one working directory. */
-async function scanRoots(ctx: Context, service: PluginsPlusService, cwd: string | undefined): Promise<unknown> {
-  const fs = ctx.get('fs') as ProviderFs | undefined
-  const config = service.skillConfig()
-  const target = cwd ?? fallbackCwd(ctx)
-  const roots = await computeRoots(config, target, {
-    fs,
-    home: () => resolveUserHome(ctx as unknown as { get(name: string): unknown }),
-  })
-  return { ok: true, cwd: target, config, roots }
-}
-
-/** Best-effort working directory when the client names none. */
-function fallbackCwd(ctx: Context): string {
-  try {
-    const registry = ctx.get('workspaceRegistry') as { list?: () => { path?: string }[] } | undefined
-    const workspaces = registry?.list?.()
-    const first = Array.isArray(workspaces) ? workspaces[0] : undefined
-    if (first !== undefined && typeof first.path === 'string' && first.path.length > 0) return first.path
-  } catch {
-    // fall through
+/**
+ * Format the engine's run log as plain text, for the page's log link.
+ * @param service - the bundle service (mounted components, effective config).
+ * @param state - the recorded passes plus the migration and the last error.
+ * @returns the whole log, newest pass first.
+ */
+function logText(service: PluginsPlusService, state: BundleState): string {
+  const snapshot = service.snapshot()
+  const mounted = service.mountedComponents()
+  const lines: string[] = [
+    'dsh-plugins-plus 运行日志',
+    `生成时间: ${new Date().toISOString()}`,
+    `接管范围: mode=${snapshot.presetsMode} presets=[${snapshot.presets.join(', ')}]`,
+    `组件: ${COMPONENTS.map(component => `${component.id}(${mounted.has(component.id) ? '运行中' : '已停用'})`).join('  ')}`,
+  ]
+  if (state.lastError !== undefined) lines.push(`最近错误: ${state.lastError}`)
+  if (state.migration !== undefined) {
+    lines.push('', `迁移（${state.migration.at}）`)
+    for (const note of state.migration.notes) lines.push(`  ${note}`)
+    if (state.migration.error !== undefined) lines.push(`  失败：${state.migration.error}`)
   }
-  return process.cwd()
+  lines.push('', `接管记录（新→旧，最多保留 ${PASS_HISTORY} 条）`)
+  if (state.history.length === 0) lines.push('  （本进程还没有跑过接管）')
+  for (const report of state.history) {
+    lines.push(
+      `[${report.at}] 原因 ${report.reason}：写入 ${report.written} 个预设；已挂载组件 ${report.mounted.join(', ') || '无'}`,
+    )
+    for (const entry of report.entries) {
+      if (entry.action !== 'write' && entry.error === undefined) continue
+      lines.push(entry.error !== undefined
+        ? `    ${entry.presetId}: 失败 ${entry.error}`
+        : `    ${entry.presetId}: 已更新 ${entry.activeComponents.join(', ')}`)
+    }
+    if (report.failures.length > 0) {
+      lines.push(`    失败 ${report.failures.length} 个：${report.failures.map(failure => `${failure.presetId}(${failure.error})`).join('；')}`)
+    }
+    if (report.problems.length > 0) lines.push(`    提示：${report.problems.join('；')}`)
+  }
+  return `${lines.join('\n')}\n`
 }

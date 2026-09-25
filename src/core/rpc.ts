@@ -5,12 +5,13 @@
  * (`ctx.configForms` in the browser → the settings document → the config
  * editor → the profile patch), so this module only answers questions the
  * client cannot compute: which presets exist, what each one currently runs,
- * which components are mounted, and what a scan would look at. One POST route
- * exists to ask the engine for another pass after a manual patch edit.
+ * which components are mounted, and what the takeover engine has been doing
+ * (plain text, for the configuration page's log link). One POST route exists to
+ * ask the engine for another pass after a manual patch edit.
  *
  * Routes must stay unique — registering the same path twice throws — and every
- * route answers JSON, so the client can render a failure instead of a blank
- * page.
+ * route answers JSON (the log answers text), so the client can render a failure
+ * instead of a blank page.
  *
  * @module @sidleo3/dsh-plugins-plus/rpc
  */
@@ -44,8 +45,8 @@ export const API_PREFIX = '/api/dsh-plugins-plus'
 export interface RpcHandlers {
   /** Everything the configuration page needs to render status. */
   status(): Promise<unknown>
-  /** Scan roots a session in `cwd` would look at, for the preview panel. */
-  roots(cwd: string | undefined): Promise<unknown>
+  /** The engine's run log as plain text, behind the page's log link. */
+  log(): Promise<string>
   /** Run one engine pass now, after a manual patch edit. */
   reconcile(): Promise<unknown>
 }
@@ -67,18 +68,9 @@ function sendJson(res: HttpResponseLike, body: unknown, code = 200): void {
   res.end(JSON.stringify(body))
 }
 
-/** Read `?cwd=` off a request URL. */
-function cwdOf(req: HttpRequestLike): string | undefined {
-  const url = req.url
-  if (typeof url !== 'string') return undefined
-  const match = /[?&]cwd=([^&#]+)/.exec(url)
-  if (match === null) return undefined
-  try {
-    const value = decodeURIComponent(match[1])
-    return value.length > 0 ? value : undefined
-  } catch {
-    return undefined
-  }
+function sendText(res: HttpResponseLike, body: string, code = 200): void {
+  res.writeHead(code, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' })
+  res.end(body)
 }
 
 /**
@@ -114,8 +106,21 @@ export function registerRoutes(ctx: Context, handlers: RpcHandlers): boolean {
 
   webServer.register({
     kind: 'exact',
-    path: `${API_PREFIX}/roots`,
-    handler: guard('roots', req => handlers.roots(cwdOf(req))),
+    path: `${API_PREFIX}/log`,
+    handler: async (req, res) => {
+      const method = req.method?.toUpperCase()
+      if (method !== undefined && method !== 'GET' && method !== 'HEAD') {
+        sendText(res, 'GET required', 405)
+        return
+      }
+      try {
+        sendText(res, await handlers.log())
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        ctx.logger?.warn?.(`[dsh-plugins-plus] log failed: ${message}`)
+        sendText(res, `读取运行日志失败：${message}`, 500)
+      }
+    },
   })
 
   webServer.register({

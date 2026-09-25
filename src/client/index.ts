@@ -108,7 +108,9 @@ const CSS = `
 .dppChip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;line-height:1.4;padding:2px 8px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary)}
 .dppChipOn{border-color:var(--dsw-alias-label-dimmed);color:var(--dsw-alias-label-primary)}
 .dppChipOff{opacity:.75}
-.dppPre{background:var(--dsw-alias-bg-layer-2);border-radius:8px;padding:8px;margin:6px 0 0;max-height:200px;overflow:auto;font-size:11.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word;color:var(--dsw-alias-label-secondary)}
+.dppFoot{margin-top:2px}
+.dppLink{font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);text-decoration:none}
+.dppLink:hover{color:var(--dsw-alias-label-primary);text-decoration:underline}
 .dppWarn{font-size:12px;line-height:1.5;color:var(--dsw-alias-label-error);margin:6px 0 0}
 .dppOk{font-size:12px;line-height:1.5;color:var(--dsw-alias-label-primary);margin:6px 0 0}
 .dppEmpty{font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}
@@ -189,8 +191,8 @@ function useStatus(ctx) {
   }, [load])
   // Host-side enablement moves on its own: the Plugins page switches a row, a
   // bundle goes off, an install lands. The Host forwards every such change as
-  // `plugin-manager/changed`; without this the tags, the takeover chips and the
-  // last-pass report all keep whatever the first read answered.
+  // `plugin-manager/changed`; without this the tags and the takeover chips keep
+  // whatever the first read answered.
   //
   // A row that mounts for the first time in this process registers itself a
   // moment AFTER that event, so reading only on the spot can still answer "not
@@ -716,7 +718,6 @@ function DshPlusPage(props) {
   const [message, setMessage] = useState(null)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [preview, setPreview] = useState(null)
 
   const revision = snapshot ? snapshot.revision : undefined
   const ready = snapshot ? snapshot.status === 'ready' : false
@@ -790,26 +791,12 @@ function DshPlusPage(props) {
     }
   }
 
-  const loadPreview = async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      setPreview(await api('/roots'))
-    } catch (failure) {
-      setError(String((failure && failure.message) || failure))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const toggleOpen = id => {
     setOpenIds(current => (current.includes(id) ? current.filter(item => item !== id) : [...current, id]))
   }
 
   const disabled = !ready || !writable || busy
   const presets = (status.data && status.data.presets) || []
-  const report = status.data && status.data.report
-  const migration = status.data && status.data.migration
 
   return h(
     'div',
@@ -902,48 +889,20 @@ function DshPlusPage(props) {
       : null,
 
     h(
-      'section',
-      { className: 'dppCard' },
+      'div',
+      { className: 'dppFoot' },
       h(
-        'button',
-        { type: 'button', className: 'dppCardHead', onClick: () => toggleOpen('preview') },
-        h('span', { className: 'dppCardText' },
-          h('span', { className: 'dppCardTitle' }, '扫描根预览'),
-          h('span', { className: 'dppCardSub' }, '按当前 skills 配置，对最近使用的工作目录会扫哪些目录。'),
-        ),
-        h(Chevron, { open: openIds.includes('preview') }),
+        'a',
+        {
+          className: 'dppLink',
+          href: `${API}/log`,
+          target: '_blank',
+          rel: 'noreferrer',
+          title: '在新标签页里查看接管引擎的运行日志',
+        },
+        '运行日志 ↗',
       ),
-      openIds.includes('preview')
-        ? h(
-            'div',
-            { className: 'dppBody' },
-            h('button', { type: 'button', className: 'dppBtn', disabled: busy, onClick: loadPreview }, '读取扫描根'),
-            preview
-              ? h('div', { className: 'dppPre' },
-                  `cwd: ${preview.cwd}\n` +
-                    (preview.roots || [])
-                      .map(root => `${String(root.rank).padStart(3, ' ')}  ${root.source.padEnd(16, ' ')} ${root.root}`)
-                      .join('\n'))
-              : null,
-          )
-        : null,
     ),
-
-    report || migration
-      ? h(
-          'div',
-          { className: 'dppPre' },
-          report
-            ? `上次应用（${report.at}，原因 ${report.reason}）：写入 ${report.written} 个预设；已挂载组件 ${(report.mounted || []).join(', ') || '无'}\n` +
-              (report.entries || [])
-                .filter(entry => entry.action === 'write' || entry.error)
-                .map(entry => `  ${entry.presetId}: ${entry.error ? '失败 ' + entry.error : '已更新 ' + (entry.activeComponents || []).join(', ')}`)
-                .join('\n') +
-              ((report.problems || []).length > 0 ? '\n  提示：' + report.problems.join('；') : '')
-            : '',
-          migration ? `\n迁移：\n  ${(migration.notes || []).join('\n  ')}${migration.error ? `\n  失败：${migration.error}` : ''}` : '',
-        )
-      : null,
 
     message ? h('div', { className: 'dppOk' }, `✓ ${message}`) : null,
     error ? h('div', { className: 'dppWarn' }, `✕ ${error}`) : null,

@@ -622,6 +622,7 @@ checkRender('renders the Settings section with both component cards', 'settings.
   '保存全局配置',
   '立即应用',
   '正在读取预设状态',
+  '运行日志',
 ])
 
 checkRender(
@@ -635,6 +636,21 @@ checkRender(
   'plugins.row.config:@sidleo3/dsh-plugins-plus#agent-instructions-plus',
   ['指令文件名', '项目根标记', 'maxBytes'],
 )
+
+// The scan-root preview and the run log used to sit on the configuration page;
+// both are gone — the log is a link to the Host route, so the page stays
+// configuration only.
+check('keeps the run log off the page, behind its link', () => {
+  const section = renderToStaticMarkup(
+    React.createElement(registeredPages.get('settings.section:dsh-plugins-plus')),
+  )
+  assert.ok(!section.includes('扫描根预览'), 'the scan-root preview is back on the page')
+  assert.ok(!section.includes('dppPre'), 'the run log is rendered on the page again')
+  assert.ok(
+    section.includes('href="/api/dsh-plugins-plus/log"'),
+    'the page must link to the Host log route',
+  )
+})
 
 // `⌃` and `⌄` are different glyphs (own weight, own baseline), so an expanded
 // card never mirrored a collapsed one. One chevron, rotated in the open state.

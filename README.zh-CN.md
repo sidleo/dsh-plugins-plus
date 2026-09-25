@@ -45,7 +45,8 @@ dsh plugin --profile <profile> add link:/path/to/dsh-plugins-plus
 
 - **全局配置**：接管哪些 agent 预设（勾选 / 全部 / 不接管）。所有组件默认继承它。
 - **每个组件卡片**：生效范围（继承全局 / 单独指定）、组件参数（扫描层、上级目录、文件名、字节预算…）、当前每个预设的接管状态。
-- **扫描根预览**：按当前 skills 配置对最近工作目录会扫哪些目录。
+
+页面底部只有一个 **运行日志 ↗** 链接：接管引擎的运行记录（迁移结果、每次接管的原因与写入、失败与提示）在新标签页里以纯文本打开（`/api/dsh-plugins-plus/log`），不占配置页面。
 
 写入走 DSH 官方管线（`ctx.configForms` → settings → config editor → profile 的 `cordis.patch.yml`）：
 
