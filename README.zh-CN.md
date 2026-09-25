@@ -46,7 +46,7 @@ dsh plugin --profile <profile> add link:/path/to/dsh-plugins-plus
 - **全局配置**：接管哪些 agent 预设（勾选 / 全部 / 不接管）。所有组件默认继承它。
 - **每个组件卡片**：生效范围（继承全局 / 单独指定）、组件参数（扫描层、上级目录、文件名、字节预算…）、当前每个预设的接管状态。
 
-页面底部只有一个 **运行日志 ↗** 链接：接管引擎的运行记录（迁移结果、每次接管的原因与写入、失败与提示）在新标签页里以纯文本打开（`/api/dsh-plugins-plus/log`），不占配置页面。
+页面底部只有一个 **运行日志** 入口：点击后在**页面内浮层**里显示接管引擎的运行记录（当前生效配置与组件状态、迁移结果、最近 20 次接管的原因/写入/失败/提示），不占配置页面、也不开新标签（DSH 桌面端拒绝 `window.open`）；同样的文本可以直接 `GET /api/dsh-plugins-plus/log`。
 
 写入走 DSH 官方管线（`ctx.configForms` → settings → config editor → profile 的 `cordis.patch.yml`）：
 

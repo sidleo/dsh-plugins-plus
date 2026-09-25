@@ -640,16 +640,21 @@ checkRender(
 // The scan-root preview and the run log used to sit on the configuration page;
 // both are gone — the log is a link to the Host route, so the page stays
 // configuration only.
-check('keeps the run log off the page, behind its link', () => {
+check('keeps the run log off the page, behind its opener', () => {
   const section = renderToStaticMarkup(
     React.createElement(registeredPages.get('settings.section:dsh-plugins-plus')),
   )
   assert.ok(!section.includes('扫描根预览'), 'the scan-root preview is back on the page')
   assert.ok(!section.includes('dppPre'), 'the run log is rendered on the page again')
-  assert.ok(
-    section.includes('href="/api/dsh-plugins-plus/log"'),
-    'the page must link to the Host log route',
-  )
+  assert.ok(section.includes('运行日志'), 'the page must offer the log opener')
+  // The Desktop shell denies window.open for anything but https, so a link with
+  // target="_blank" to this route would be dropped without a trace; the opener
+  // must stay a button that renders the log in an overlay.
+  assert.ok(!section.includes('target="_blank"'), 'the log opener must not rely on a popup')
+  const bundle = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+  assert.ok(bundle.includes('dppOverlay'), 'the log overlay is gone')
+  // The bundler re-quotes literals, so match either spelling.
+  assert.ok(/apiText\(["']\/log["']\)/.test(bundle), 'the page must read the Host log route')
 })
 
 // `⌃` and `⌄` are different glyphs (own weight, own baseline), so an expanded

@@ -109,8 +109,15 @@ const CSS = `
 .dppChipOn{border-color:var(--dsw-alias-label-dimmed);color:var(--dsw-alias-label-primary)}
 .dppChipOff{opacity:.75}
 .dppFoot{margin-top:2px}
-.dppLink{font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary);text-decoration:none}
-.dppLink:hover{color:var(--dsw-alias-label-primary);text-decoration:underline}
+/* A button, not an anchor: the Desktop shell denies window.open, so a
+   target="_blank" link to the log route would be dropped without a trace. */
+.dppLink{appearance:none;border:0;background:none;padding:0;cursor:pointer;font:inherit;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}
+.dppLink:hover:not(:disabled){color:var(--dsw-alias-label-primary);text-decoration:underline}
+.dppLink:disabled{opacity:.45;cursor:default}
+.dppOverlay{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:32px;background:rgba(0,0,0,.32)}
+.dppOverlayPanel{display:flex;flex-direction:column;gap:10px;width:min(760px,100%);max-height:min(72vh,640px);padding:14px;border-radius:12px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3)}
+.dppOverlayHead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.dppLog{flex:1;min-height:0;overflow:auto;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;line-height:1.55;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2);border-radius:8px;padding:10px}
 .dppWarn{font-size:12px;line-height:1.5;color:var(--dsw-alias-label-error);margin:6px 0 0}
 .dppOk{font-size:12px;line-height:1.5;color:var(--dsw-alias-label-primary);margin:6px 0 0}
 .dppEmpty{font-size:12px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}
@@ -138,6 +145,18 @@ function injectStyles() {
 /** Clone a configuration value for local editing. */
 function clone(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value))
+}
+
+/**
+ * Fetch one read-only answer from the host as plain text (the log route).
+ * @param path - route under the bundle's API prefix.
+ * @returns the body.
+ */
+async function apiText(path) {
+  const res = await fetch(API + path, { headers: { accept: 'text/plain' } })
+  const body = await res.text()
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return body
 }
 
 /** Fetch one read-only answer from the host. */
@@ -718,6 +737,7 @@ function DshPlusPage(props) {
   const [message, setMessage] = useState(null)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [log, setLog] = useState(null)
 
   const revision = snapshot ? snapshot.revision : undefined
   const ready = snapshot ? snapshot.status === 'ready' : false
@@ -791,12 +811,51 @@ function DshPlusPage(props) {
     }
   }
 
+  const openLog = async () => {
+    setLog({ status: 'loading' })
+    try {
+      setLog({ status: 'ready', text: await apiText('/log') })
+    } catch (failure) {
+      const reason = String((failure && failure.message) || failure)
+      setLog({
+        status: 'error',
+        error:
+          reason === 'HTTP 404'
+            ? '运行日志不可用（HTTP 404）：host 半边还是旧版本——重启 DSH 后可用（浏览器半边刷新即可，host 半边只在启动时加载）。'
+            : `运行日志读取失败：${reason}`,
+      })
+    }
+  }
+
   const toggleOpen = id => {
     setOpenIds(current => (current.includes(id) ? current.filter(item => item !== id) : [...current, id]))
   }
 
   const disabled = !ready || !writable || busy
   const presets = (status.data && status.data.presets) || []
+  // A host older than this browser half serves no /log: it still answers the
+  // status document, which carries the last pass and the migration outcome, so
+  // the overlay shows those instead of nothing.
+  const statusReport = status.data && status.data.report
+  const statusMigration = status.data && status.data.migration
+  const fallbackLog =
+    statusReport || statusMigration
+      ? [
+          '（host 半边早于本页：只显示最近一次接管与迁移结果）',
+          statusReport
+            ? `[${statusReport.at}] 原因 ${statusReport.reason}：写入 ${statusReport.written} 个预设；已挂载组件 ${(statusReport.mounted || []).join(', ') || '无'}`
+            : '',
+          ...(statusReport && statusReport.entries ? statusReport.entries : [])
+            .filter(entry => entry.action === 'write' || entry.error)
+            .map(entry => (entry.error ? `    ${entry.presetId}: 失败 ${entry.error}` : `    ${entry.presetId}: 已更新 ${(entry.activeComponents || []).join(', ')}`)),
+          ...(statusReport && (statusReport.problems || []).length > 0 ? [`    提示：${statusReport.problems.join('；')}`] : []),
+          statusMigration ? `迁移（${statusMigration.at}）` : '',
+          ...((statusMigration && statusMigration.notes) || []).map(note => `  ${note}`),
+          statusMigration && statusMigration.error ? `  失败：${statusMigration.error}` : '',
+        ]
+          .filter(line => line !== '')
+          .join('\n')
+      : null
 
   return h(
     'div',
@@ -892,17 +951,45 @@ function DshPlusPage(props) {
       'div',
       { className: 'dppFoot' },
       h(
-        'a',
+        'button',
         {
+          type: 'button',
           className: 'dppLink',
-          href: `${API}/log`,
-          target: '_blank',
-          rel: 'noreferrer',
-          title: '在新标签页里查看接管引擎的运行日志',
+          disabled: log !== null && log.status === 'loading',
+          onClick: openLog,
         },
-        '运行日志 ↗',
+        '运行日志',
       ),
     ),
+
+    log
+      ? h(
+          'div',
+          {
+            className: 'dppOverlay',
+            role: 'dialog',
+            'aria-modal': 'true',
+            'aria-label': '运行日志',
+            onClick: event => {
+              if (event.target === event.currentTarget) setLog(null)
+            },
+          },
+          h(
+            'div',
+            { className: 'dppOverlayPanel' },
+            h(
+              'div',
+              { className: 'dppOverlayHead' },
+              h('span', { className: 'dppSectionTitle', style: { margin: 0 } }, '运行日志'),
+              h('button', { type: 'button', className: 'dppBtn', onClick: () => setLog(null) }, '关闭'),
+            ),
+            log.status === 'loading' ? h('div', { className: 'dppHint' }, '正在读取…') : null,
+            log.status === 'error' ? h('div', { className: 'dppWarn' }, log.error) : null,
+            log.status === 'error' && fallbackLog ? h('div', { className: 'dppLog' }, fallbackLog) : null,
+            log.status === 'ready' ? h('div', { className: 'dppLog' }, log.text) : null,
+          ),
+        )
+      : null,
 
     message ? h('div', { className: 'dppOk' }, `✓ ${message}`) : null,
     error ? h('div', { className: 'dppWarn' }, `✕ ${error}`) : null,

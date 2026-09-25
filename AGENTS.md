@@ -6,7 +6,7 @@
 
 ## 项目是什么
 
-- **包名**：`@sidleo3/dsh-plugins-plus`（v0.1.4）
+- **包名**：`@sidleo3/dsh-plugins-plus`（v0.1.5）
 - **仓库**：GitHub `sidleo/dsh-plugins-plus`（分支 `main`）
 - **组件**：`agent-instructions-plus`（替代 `agent-instructions`）、`skill-filesystem-plus`（替代 `skill-filesystem`）；命名规则 = 官方行 id + `-plus`
 - **核心行**：`dsh-plugins-plus` — 唯一常开行，持有配置 schema、接管引擎、只读状态接口
@@ -67,7 +67,9 @@ pnpm smoke           # 31 项检查，改规划器/迁移/client 后必跑
 12. **验证必须看真实链路**：`settings/describe` 能确认 namespace 被服务（`applies: live`、`autoGenerate: false`），`settings/mutate` 能确认写入即时生效；只用单元测试或只看 patch 文件都会漏掉接线问题（本项目就是靠这条抓出「通知没接引擎」和「HMR 嵌套」两个 bug）。
 13. **实心按钮的 hover 不能复用 `.dppBtn` 的 hover 颜色**：`dppBtnPrimary` 的背景就是 `label-primary`，而通用 hover 规则把文字也刷成 `label-primary`——同特异性下后写的规则才生效，所以实心按钮自己的 `:hover` 规则必须排在通用规则之后（否则悬停时整个按钮变成一块纯色，0.1.1 的现象）。`scripts/smoke.mjs` 有对应检查，别把顺序调回去。
 14. **启用状态靠 Host 事件刷新，且事件早于挂载**：客户端必须注入 `remote` 并 `ctx.remote.$on('plugin-manager/changed', …)` 重读 `/status`（0.1.1 只在 mount 时读一次，开关动了标签不跟着走）。事件发出时组件行**还没**完成 mount，紧跟的那次读取可能仍答 `mounted: false`（实测 activator 行在管理调用返回后约 80ms 才注册），所以 0.1.2 在 500ms / 1600ms 各补读一次——只读一次会偶发停在旧状态。
-15. **卡片展开/收起必须用同一个图标旋转**：`⌃`(U+2303) 与 `⌄`(U+2304) 是两个不同字形，字重与基线都不同，展开/收起看起来不对称（0.1.2 的现象）。改成单个 SVG chevron + `.dppChevronOpen{transform:rotate(180deg)}`，两态才是严格镜像；`scripts/smoke.mjs` 有对应检查。
+15. **Desktop shell 拒绝一切 `window.open`**：`app.asar/lib/main.js` 的 `setWindowOpenHandler` 只把 **https** 交给系统浏览器，其余一律 `{action:'deny'}`——所以 `target="_blank"` 指向 `http://127.0.0.1:…/api/…` 的链接点下去毫无反应（0.1.4 的现象）。日志这类内容一律**在页面内用浮层渲染**，不要开新标签。
+16. **host 半边只在启动时加载**：浏览器半边按请求从磁盘读（刷新即新），host 半边是启动时 import 的（改路由/引擎必须重启 DSH）。所以新增 host 路由的功能要能容忍旧 host：0.1.5 的日志浮层在 `/log` 404 时回落到 `/status` 里的最近一次接管与迁移结果，并提示重启。
+17. **卡片展开/收起必须用同一个图标旋转**：`⌃`(U+2303) 与 `⌄`(U+2304) 是两个不同字形，字重与基线都不同，展开/收起看起来不对称（0.1.2 的现象）。改成单个 SVG chevron + `.dppChevronOpen{transform:rotate(180deg)}`，两态才是严格镜像；`scripts/smoke.mjs` 有对应检查。
 
 ## 本地验证（一次性 scratch profile，不碰真实 profile）
 

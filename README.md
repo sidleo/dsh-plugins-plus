@@ -43,7 +43,7 @@ One page, three entry points, the same UI:
 | Sidebar **Plugins** → this bundle's card | `plugins.bundle.config` |
 | Sidebar **Plugins** → a component row's **Configure** | `plugins.row.config`, keyed `<package>#<row id>` |
 
-The page offers a **global** preset selection every component inherits, one card per component (inherit the global selection or pick its own, plus that component's parameters), and the live takeover state of every preset. The page carries no log: a **run log ↗** link at its foot opens the engine's record (migration outcome, why each pass ran, what it wrote, failures and notes) as plain text at `/api/dsh-plugins-plus/log`.
+The page offers a **global** preset selection every component inherits, one card per component (inherit the global selection or pick its own, plus that component's parameters), and the live takeover state of every preset. The page carries no log: a **run log** opener at its foot shows the engine's record (effective configuration and component state, migration outcome, the last 20 passes with their reasons, writes, failures and notes) in an in-page overlay — never in a new tab, because the Desktop shell denies `window.open`. The same text answers `GET /api/dsh-plugins-plus/log`.
 
 Writes go through DSH's own pipeline (`ctx.configForms` → settings → config editor → the profile's `cordis.patch.yml`):
 
