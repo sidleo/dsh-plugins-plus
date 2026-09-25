@@ -1,0 +1,30 @@
+# dsh-plugins-plus bundle patch: inserts the bundle's plugin rows into a DSH profile roster.
+# Applied as a profile bundle layer (the `dsh.bundle.patch` manifest field) over dsh-base:
+#
+#   dsh plugin --profile <name> add @sidleo3/dsh-plugins-plus
+#   # or, from a checkout:
+#   dsh plugin --profile <name> add link:<repo-path>
+#
+# One row per component. The core row owns every configuration field and the
+# preset-takeover engine; the component rows are thin activators, shipped
+# switched OFF so a profile can enable exactly the components it wants
+# ("install the bundle once, turn on the components you need").
+#
+#   dsh-plugins-plus        core:   Config schema (global preset list + per-component
+#                                  sections), takeover engine, read-only status RPC
+#   agent-instructions-plus component: replaces the built-in `agent-instructions` per preset
+#   skill-filesystem-plus   component: replaces the built-in `skill-filesystem` per preset
+#
+# Component row ids follow the rule "<built-in row id>-plus"; a new component adds
+# one row here plus its exports in package.json — nothing else in the profile changes.
+- insert:
+    - id: dsh-plugins-plus
+      name: '@sidleo3/dsh-plugins-plus'
+
+    - id: agent-instructions-plus
+      name: '@sidleo3/dsh-plugins-plus/agent-instructions'
+      disabled: true
+
+    - id: skill-filesystem-plus
+      name: '@sidleo3/dsh-plugins-plus/skill-filesystem'
+      disabled: true

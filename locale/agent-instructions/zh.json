@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "agent-instructions-plus",
+    "description": "在选中的预设里替代内置 AGENTS.md 注入：四层扫描（工作目录 / 项目 / 逐级上级 / 全局）。"
+  }
+}

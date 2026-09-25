@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "agent-instructions-plus",
+    "description": "Replaces the built-in AGENTS.md injection in selected presets: four scan layers (cwd / project / all ancestors / global)."
+  }
+}

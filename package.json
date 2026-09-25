@@ -1,0 +1,144 @@
+{
+  "name": "@sidleo3/dsh-plugins-plus",
+  "version": "0.1.0",
+  "description": "dsh-plugins-plus: one DSH bundle with independently switchable components that replace built-in plugins per agent preset (agent-instructions-plus, skill-filesystem-plus, ...). Configuration lives in DSH Settings; component settings inherit the global preset takeover list unless overridden.",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "plugin",
+    "bundle",
+    "components",
+    "agent-preset",
+    "agent-instructions-plus",
+    "skill-filesystem-plus",
+    "dsh-plugins-plus"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./agent-instructions": {
+      "types": "./lib/agent-instructions.d.ts",
+      "default": "./lib/agent-instructions.js"
+    },
+    "./agent-instructions/preset": {
+      "types": "./lib/agent-instructions-preset.d.ts",
+      "default": "./lib/agent-instructions-preset.js"
+    },
+    "./agent-instructions/locale/*": "./locale/agent-instructions/*",
+    "./skill-filesystem": {
+      "types": "./lib/skill-filesystem.d.ts",
+      "default": "./lib/skill-filesystem.js"
+    },
+    "./skill-filesystem/preset": {
+      "types": "./lib/skill-filesystem-preset.d.ts",
+      "default": "./lib/skill-filesystem-preset.js"
+    },
+    "./skill-filesystem/locale/*": "./locale/skill-filesystem/*",
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./locale/*": "./locale/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "cordis.patch.yml",
+    "locale",
+    "README.md",
+    "README.zh-CN.md"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  },
+  "pnpm": {
+    "verifyDepsBeforeRun": false
+  },
+  "scripts": {
+    "resolve-types": "node scripts/resolve-dsh-types.mjs",
+    "build": "tsdown",
+    "typecheck": "node scripts/resolve-dsh-types.mjs && tsc --noEmit",
+    "clean": "rm -rf lib",
+    "smoke": "node scripts/smoke.mjs",
+    "prepack": "pnpm build"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-agent-preset": "^0.1.7-alpha.2",
+    "@deepseek-ai/dsh-agent-preset-registry": "^0.1.7-alpha.2",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.7-alpha.2",
+    "@deepseek-ai/dsh-skill": "^0.1.7-alpha.2",
+    "@deepseek-ai/schemastery": "^3.18.4",
+    "react": "^18.2.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-agent-preset": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-agent-preset-registry": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-runtime": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-slots": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-skill": {
+      "optional": true
+    },
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-agent-preset": "^0.1.7-alpha.2",
+    "@deepseek-ai/dsh-agent-preset-registry": "^0.1.7-alpha.2",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.7-alpha.2",
+    "@deepseek-ai/dsh-skill": "^0.1.7-alpha.2",
+    "@deepseek-ai/schemastery": "^3.18.4",
+    "@types/node": "^22.20.0",
+    "@types/react": "~18.3.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "schemastery": "^3.18.0",
+    "tsdown": "0.22.2",
+    "typescript": "~5.7.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sidleo/dsh-plugins-plus.git"
+  }
+}

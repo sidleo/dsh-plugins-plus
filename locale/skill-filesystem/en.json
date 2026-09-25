@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "skill-filesystem-plus",
+    "description": "Replaces the built-in skill discovery in selected presets: four scan layers plus editable parent directory names."
+  }
+}
