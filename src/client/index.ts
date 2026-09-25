@@ -117,6 +117,8 @@ const CSS = `
 .dppMini{appearance:none;border:0;background:none;cursor:pointer;color:var(--dsw-alias-label-tertiary);font-size:13px;padding:2px 4px;flex:none}
 .dppMini:hover:not(:disabled){color:var(--dsw-alias-label-primary)}
 .dppMini:disabled{opacity:.4;cursor:default}
+.dppChevron{flex:none;display:block;width:16px;height:16px;color:var(--dsw-alias-label-tertiary);transition:transform .15s ease}
+.dppChevronOpen{transform:rotate(180deg)}
 .dppRank{flex:none;min-width:20px;text-align:right;font-size:11px;color:var(--dsw-alias-label-tertiary)}
 `
 
@@ -230,6 +232,33 @@ function Field(props) {
     h('span', { className: 'dppLabel' }, props.label),
     props.children,
     props.hint ? h('span', { className: 'dppSub' }, props.hint) : null,
+  )
+}
+
+/**
+ * Card expand/collapse indicator: one chevron glyph, flipped in the open state.
+ * The text arrowheads `⌃`/`⌄` are two different glyphs with their own weight
+ * and baseline, so the expanded card never mirrored the collapsed one.
+ */
+function Chevron(props) {
+  return h(
+    'svg',
+    {
+      className: 'dppChevron' + (props.open === true ? ' dppChevronOpen' : ''),
+      viewBox: '0 0 16 16',
+      width: 16,
+      height: 16,
+      'aria-hidden': 'true',
+      focusable: 'false',
+    },
+    h('path', {
+      d: 'M3.5 6 8 10.5 12.5 6',
+      fill: 'none',
+      stroke: 'currentColor',
+      strokeWidth: 1.5,
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+    }),
   )
 }
 
@@ -601,7 +630,7 @@ function ComponentCard(props) {
         h('span', { className: 'dppCardSub' }, component.subtitle),
       ),
       h('span', { className: 'dppTag ' + (mounted ? 'dppTagOn' : '') }, mounted ? '已启用' : everMounted ? '已停用' : '未启用'),
-      h('span', { className: 'dppMini' }, open ? '⌃' : '⌄'),
+      h(Chevron, { open }),
     ),
     open
       ? h(
@@ -825,7 +854,7 @@ function DshPlusPage(props) {
           h('span', { className: 'dppCardSub' }, '所有组件的默认接管范围；组件可单独覆盖。'),
         ),
         h('span', { className: 'dppTag' }, `${presets.length} 个预设`),
-        h('span', { className: 'dppMini' }, openIds.includes('global') ? '⌃' : '⌄'),
+        h(Chevron, { open: openIds.includes('global') }),
       ),
       openIds.includes('global') && draft
         ? h(
@@ -882,7 +911,7 @@ function DshPlusPage(props) {
           h('span', { className: 'dppCardTitle' }, '扫描根预览'),
           h('span', { className: 'dppCardSub' }, '按当前 skills 配置，对最近使用的工作目录会扫哪些目录。'),
         ),
-        h('span', { className: 'dppMini' }, openIds.includes('preview') ? '⌃' : '⌄'),
+        h(Chevron, { open: openIds.includes('preview') }),
       ),
       openIds.includes('preview')
         ? h(

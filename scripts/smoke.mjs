@@ -636,6 +636,28 @@ checkRender(
   ['指令文件名', '项目根标记', 'maxBytes'],
 )
 
+// `⌃` and `⌄` are different glyphs (own weight, own baseline), so an expanded
+// card never mirrored a collapsed one. One chevron, rotated in the open state.
+check('expand and collapse share one chevron glyph', () => {
+  const section = renderToStaticMarkup(
+    React.createElement(registeredPages.get('settings.section:dsh-plugins-plus')),
+  )
+  assert.ok(!section.includes('⌃') && !section.includes('⌄'), 'the text arrowheads are back')
+  assert.ok(
+    section.includes('class="dppChevron dppChevronOpen"'),
+    'the open card must mark its chevron as open',
+  )
+  assert.ok(
+    (section.match(/class="dppChevron"/g) ?? []).length >= 2,
+    'the collapsed cards must render the same chevron, unrotated',
+  )
+  const bundle = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+  assert.ok(
+    bundle.includes('.dppChevronOpen{transform:rotate(180deg)}'),
+    'the open state must be the same glyph rotated, not a second drawing',
+  )
+})
+
 // ── Report ───────────────────────────────────────────────────────────
 
 console.log('')
