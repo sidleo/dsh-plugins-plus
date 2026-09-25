@@ -155,6 +155,7 @@ function startEngine(
   let queued = false
   let migrated = false
   let retries = 0
+  let migrationAttempts = 0
 
   const log = (message: string): void => {
     console.log(message)
@@ -173,41 +174,61 @@ function startEngine(
   }
 
   async function performPass(reason: string): Promise<ReconcileReport | undefined> {
-    try {
-      let compositions = await readCompositions(ctx)
-      if (!migrated) {
-        migrated = true
-        const outcome = await migrateOnce(editor, compositions, service.snapshot().legacyImport)
-        if (outcome !== undefined) {
-          state.migration = outcome
-          if (outcome.notes.length > 0) for (const note of outcome.notes) log(`[dsh-plugins-plus] 迁移：${note}`)
-          if (outcome.error !== undefined) log(`[dsh-plugins-plus] 迁移失败：${outcome.error}`)
-          // The migration wrote the core row's own config; re-read before planning.
+    // The WHOLE pass runs outside DSH's hot-reload transaction. A Settings write
+    // (and the plugin-manager write that installs this bundle) leaves the
+    // transaction flag set on every callback scheduled from it, and both the
+    // migration and the takeover write go through `configEditor.edit()`, which
+    // takes that same transaction: without the escape they are refused with
+    // "HMR transactions cannot be nested" — the first attempt, and every retry.
+    return outsideHmrTransaction(ctx, async () => {
+      try {
+        let compositions = await readCompositions(ctx)
+        if (!migrated) {
+          const outcome = await migrateOnce(editor, compositions, service.snapshot().legacyImport)
+          if (outcome === undefined) {
+            // Nothing to import (or no core entry yet): stop asking.
+            migrated = true
+          } else {
+            state.migration = outcome
+            if (outcome.notes.length > 0) for (const note of outcome.notes) log(`[dsh-plugins-plus] 迁移：${note}`)
+            if (outcome.error === undefined) {
+              migrated = true
+            } else if (migrationAttempts < RETRY_DELAYS_MS.length) {
+              // A refused write is worth another pass; the marker is only
+              // written on success, so a restart retries too.
+              const delay = RETRY_DELAYS_MS[migrationAttempts]
+              migrationAttempts += 1
+              log(`[dsh-plugins-plus] 迁移失败：${outcome.error}；${delay}ms 后重试（第 ${migrationAttempts} 次）`)
+              schedule('migration-retry', delay)
+            } else {
+              migrated = true
+              log(`[dsh-plugins-plus] 迁移放弃：${outcome.error}`)
+            }
+          }
+          // The migration writes the core row's own config; re-read before planning.
           compositions = await readCompositions(ctx)
         }
+        const report = await reconcile(deps, compositions, reason)
+        state.lastReport = report
+        state.lastError = undefined
+        // A pass can still meet a busy profile lock; it is idempotent, so retry
+        // a few times with backoff.
+        if (report.failures.length > 0 && retries < RETRY_DELAYS_MS.length) {
+          const delay = RETRY_DELAYS_MS[retries]
+          retries += 1
+          log(`[dsh-plugins-plus] ${report.failures.length} 个预设写入失败，${delay}ms 后重试（第 ${retries} 次）`)
+          schedule('retry', delay)
+        } else {
+          retries = 0
+        }
+        return report
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        state.lastError = message
+        log(`[dsh-plugins-plus] 接管引擎失败：${message}`)
+        return undefined
       }
-      const report = await outsideHmrTransaction(ctx, () => reconcile(deps, compositions, reason))
-      state.lastReport = report
-      state.lastError = undefined
-      // A Settings write reconciles the profile under DSH's HMR transaction, so
-      // a pass that starts too early is refused with "HMR transactions cannot
-      // be nested". The pass is idempotent, so retry a few times with backoff
-      // until the host is idle enough to accept the write.
-      if (report.failures.length > 0 && retries < RETRY_DELAYS_MS.length) {
-        const delay = RETRY_DELAYS_MS[retries]
-        retries += 1
-        log(`[dsh-plugins-plus] ${report.failures.length} 个预设写入失败，${delay}ms 后重试（第 ${retries} 次）`)
-        schedule('retry', delay)
-      } else {
-        retries = 0
-      }
-      return report
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      state.lastError = message
-      log(`[dsh-plugins-plus] 接管引擎失败：${message}`)
-      return undefined
-    }
+    })
   }
 
   async function runPass(reason: string): Promise<ReconcileReport | undefined> {
