@@ -6,7 +6,8 @@
 
 ## 项目是什么
 
-- **包名**：`@sidleo3/dsh-plugins-plus`（v0.1.0）
+- **包名**：`@sidleo3/dsh-plugins-plus`（v0.1.1）
+- **仓库**：GitHub `sidleo/dsh-plugins-plus`（分支 `main`）
 - **组件**：`agent-instructions-plus`（替代 `agent-instructions`）、`skill-filesystem-plus`（替代 `skill-filesystem`）；命名规则 = 官方行 id + `-plus`
 - **核心行**：`dsh-plugins-plus` — 唯一常开行，持有配置 schema、接管引擎、只读状态接口
 - **取代**：`@sidleo3/agent-instructions-plus@0.3.4` 与 `@sidleo3/skill-filesystem-plus@0.2.5`（两个旧包保留但停止更新）
@@ -56,7 +57,7 @@ pnpm smoke           # 28 项检查，改规划器/迁移后必跑
 2. **`resolve-dsh-types.mjs` 不能映射「值导入」的包**。曾经把 `@deepseek-ai/schemastery` 也映射到运行安装的 `lib/types/index.d.ts`，打包器于是把 `import z from '@deepseek-ai/schemastery'` 解析成声明文件，产物里出现 `import ... from "./chunk.d.ts"`（运行时必挂）。只映射纯类型导入或 external 的包。
 3. **schemastery volatile 布局**：volatile 字段必须落在固定对象路径上，且**不能嵌套在另一个 volatile 字段内部**（`volatile fields require a fixed object path without an enclosing volatile field`）。本包只标三个节点：`presetsMode`、`presets`、整个 `components` 子树。
 4. **`configEditor.edit` 的语义**：profile patch 对某行是**整份 `config` 替换**（不是深合并），所以每次都要写完整 config（`{...base, plugins}`）；`next` 与 inherited 深度相等时会**删掉覆盖行**；注释与 `!!js`（`{__jsExpr}`）由它往返保留；home patch/CLI overlay 更高层时会拒绝写入。
-5. **HMR 事务不可嵌套**：`hmr.runExclusive` 用 `AsyncLocalStorage` 标记事务，「从 settings 写入回调里 setTimeout 出来」的代码会**永久继承**该标记，于是 `configEditor.edit` 永远报 `HMR transactions cannot be nested`。解法见 `src/core/hmr.ts`（`hmr.executing.exit`，特性探测 + 回退）。
+5. **HMR 事务不可嵌套**：`hmr.runExclusive` 用 `AsyncLocalStorage` 标记事务，「从 settings 写入回调 / plugin-manager 安装回调里 setTimeout 出来」的代码会**永久继承**该标记，于是 `configEditor.edit` 永远报 `HMR transactions cannot be nested`——首次尝试和后续重试都会失败。解法见 `src/core/hmr.ts`（`hmr.executing.exit`，特性探测 + 回退）。**必须包住整个 pass（迁移 + 接管），而不是只包 `reconcile`**：0.1.0 只包了后者，结果「运行中安装」时旧配置永远导不进来（0.1.1 修复；桌面 profile 就是这样复现的）。
 6. **`settings.configure({auto:false}, fiber)` 的第二个参数必须是「行自己的 fiber」**（`ctx.fiber`）。传 `ctx.inject` 子 fiber 会注册到没人读的 key 上，现象是 `settings/describe` 里 `autoGenerate` 仍是 `true`。
 7. **组件行开关只能用 loader entry id**：`pluginManager.setPluginEnabled('include:<row id>', enabled)`；传 patch id 会返回 `unknown-plugin`。我们自己的 UI 若要内嵌开关，注意这一点。
 8. **不要动共享 DSH home 里的旧配置文件**。`~/.dsh/dsh-*.json` 属于整个 DSH，其他 profile 可能仍在用；导入只在配置里记 `legacyImport` 时间戳，文件保持原样。
