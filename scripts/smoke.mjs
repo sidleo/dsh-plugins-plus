@@ -14,7 +14,7 @@
  */
 
 import assert from 'node:assert/strict'
-import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -553,7 +553,7 @@ const client = await loadClientBundle((await import('react')).default)
 
 check('registers a Settings section and both Plugins-page surfaces', () => {
   assert.equal(typeof client.apply, 'function')
-  assert.deepEqual(client.inject, ['slots'])
+  assert.deepEqual(client.inject, ['slots', 'remote'])
   client.apply(clientContext)
   assert.ok(clientRegistry.includes('settings.section'), 'missing the Settings section')
   assert.ok(
@@ -567,6 +567,23 @@ check('registers a Settings section and both Plugins-page surfaces', () => {
     )
   }
   assert.equal(registeredPages.size, 5)
+})
+
+// The dark buttons are background `label-primary` with `bg-layer-3` text; the
+// generic hover rule paints the text `label-primary` too, which erases it. The
+// fix only holds while the solid-button rule comes after that one.
+check('the solid button keeps its contrast colour while hovered', () => {
+  const bundle = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+  const generic = bundle.indexOf('.dppBtn:hover:not(:disabled){')
+  const solid = bundle.indexOf('.dppBtnPrimary:hover:not(:disabled){')
+  assert.ok(generic >= 0, 'the generic hover rule is gone')
+  assert.ok(solid >= 0, 'the solid button lost its hover rule')
+  assert.ok(solid > generic, 'the solid-button hover rule must come after the generic one')
+  const declarations = bundle.slice(solid, bundle.indexOf('}', solid))
+  assert.ok(
+    declarations.includes('color:var(--dsw-alias-bg-layer-3)'),
+    'the hovered solid button must keep the layer colour as its text',
+  )
 })
 
 // Async checks: each surface is rendered server-side with the real React and

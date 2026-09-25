@@ -22,7 +22,10 @@
 
 import React from 'react'
 
-export const inject = ['slots']
+// `remote` is the Host-event channel: the page follows plugin-management
+// changes through it, so a row switched in the Plugins list moves the
+// enablement tags without a remount.
+export const inject = ['slots', 'remote']
 
 /** Bundle package name; also the `plugins.bundle.config` key. */
 const BUNDLE = '@sidleo3/dsh-plugins-plus'
@@ -32,6 +35,13 @@ const CORE_ROW_ID = 'dsh-plugins-plus'
 const NS = 'dshPluginsPlus'
 /** Read-only host surface. */
 const API = '/api/dsh-plugins-plus'
+/**
+ * Delays of the two follow-up status reads a Host change triggers, in
+ * milliseconds. The first re-read taken the moment the change is announced can
+ * still beat a row's first mount in this process; these catch up with it.
+ */
+const SETTLE_READ_MS = 500
+const SETTLE_READ_LATE_MS = 1600
 
 const h = React.createElement
 const { useState, useEffect, useMemo, useCallback } = React
@@ -83,7 +93,12 @@ const CSS = `
 .dppBtn{appearance:none;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;padding:4px 10px;background:none;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12.5px;cursor:pointer}
 .dppBtn:hover:not(:disabled){color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-dimmed)}
 .dppBtn:disabled{opacity:.45;cursor:default}
-.dppBtnPrimary{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3);border-color:transparent}
+/* The solid button must keep the layer colour as its TEXT on hover: the generic
+   hover rule above paints the text with label-primary, which is also this
+   button's background — the whole button would read as a black block. Same
+   specificity as that rule, so this one has to come after it. */
+.dppBtnPrimary,.dppBtnPrimary:hover:not(:disabled){background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3);border-color:transparent}
+.dppBtnPrimary:hover:not(:disabled){opacity:.85}
 .dppBtnDanger{color:var(--dsw-alias-state-error-primary)}
 .dppActions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
 .dppTag{flex:none;font-size:11px;padding:1px 7px;border-radius:6px;border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-tertiary);white-space:nowrap}
@@ -150,17 +165,60 @@ function useConfigForm(ctx) {
 }
 
 /** Read the bundle's status document, with a manual reload. */
-function useStatus() {
+function useStatus(ctx) {
   const [state, setState] = useState({ loading: true, data: null, error: null })
-  const reload = useCallback(() => {
-    setState(previous => ({ ...previous, loading: true }))
-    api('/status')
-      .then(data => setState({ loading: false, data, error: null }))
-      .catch(error => setState({ loading: false, data: null, error: String(error.message || error) }))
+  // `silent` is the background refresh: it must not flash the loading hint, and
+  // a failed read keeps the document already on screen instead of blanking it.
+  const load = useCallback(async silent => {
+    if (silent !== true) setState(previous => ({ ...previous, loading: true }))
+    try {
+      const data = await api('/status')
+      setState({ loading: false, data, error: null })
+    } catch (error) {
+      const message = String((error && error.message) || error)
+      setState(previous =>
+        silent === true
+          ? { ...previous, loading: false, error: message }
+          : { loading: false, data: null, error: message })
+    }
   }, [])
   useEffect(() => {
-    reload()
-  }, [reload])
+    void load(false)
+  }, [load])
+  // Host-side enablement moves on its own: the Plugins page switches a row, a
+  // bundle goes off, an install lands. The Host forwards every such change as
+  // `plugin-manager/changed`; without this the tags, the takeover chips and the
+  // last-pass report all keep whatever the first read answered.
+  //
+  // A row that mounts for the first time in this process registers itself a
+  // moment AFTER that event, so reading only on the spot can still answer "not
+  // mounted" and leave the tag stale (measured: the activator row lands ~80 ms
+  // after the management call settles, the forward arrives alongside it). Two
+  // follow-up reads past the mount cover it; they are plain GETs on a route the
+  // page already calls.
+  useEffect(() => {
+    const remote = ctx.get('remote')
+    if (remote === undefined || typeof remote.$on !== 'function') return undefined
+    const pending = new Set()
+    const later = delay => {
+      const timer = setTimeout(() => {
+        pending.delete(timer)
+        void load(true)
+      }, delay)
+      pending.add(timer)
+    }
+    const off = remote.$on('plugin-manager/changed', () => {
+      void load(true)
+      later(SETTLE_READ_MS)
+      later(SETTLE_READ_LATE_MS)
+    })
+    return () => {
+      off?.()
+      for (const timer of pending) clearTimeout(timer)
+      pending.clear()
+    }
+  }, [ctx, load])
+  const reload = useCallback(() => load(false), [load])
   return { ...state, reload }
 }
 
@@ -619,7 +677,7 @@ function ComponentCard(props) {
 function DshPlusPage(props) {
   const { ctx, mode, focus } = props
   const { form, snapshot } = useConfigForm(ctx)
-  const status = useStatus()
+  const status = useStatus(ctx)
   // Seed the draft during the FIRST render when the host answer is already in
   // the mirror (the page therefore never paints an empty configuration), and
   // re-seed whenever the accepted document moves: our own save, a write from

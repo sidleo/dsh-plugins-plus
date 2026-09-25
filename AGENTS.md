@@ -6,7 +6,7 @@
 
 ## 项目是什么
 
-- **包名**：`@sidleo3/dsh-plugins-plus`（v0.1.1）
+- **包名**：`@sidleo3/dsh-plugins-plus`（v0.1.2）
 - **仓库**：GitHub `sidleo/dsh-plugins-plus`（分支 `main`）
 - **组件**：`agent-instructions-plus`（替代 `agent-instructions`）、`skill-filesystem-plus`（替代 `skill-filesystem`）；命名规则 = 官方行 id + `-plus`
 - **核心行**：`dsh-plugins-plus` — 唯一常开行，持有配置 schema、接管引擎、只读状态接口
@@ -30,7 +30,7 @@
 | `src/components/agent-instructions/{discovery,files,state,render,digest,config}.ts` | 从旧包移植的注入管线实现 |
 | `src/components/skill-filesystem/{provider,watcher,config}.ts` | 从旧包移植的发现实现 |
 | `src/client/index.ts` | 浏览器半：`settings.section` + `plugins.bundle.config` + `plugins.row.config`，读写全走 `ctx.configForms` |
-| `scripts/smoke.mjs` | 28 项自检：schema / 继承 / 规划器（幂等、还原、外来编辑、旧行改写）/ 迁移 / client 契约 |
+| `scripts/smoke.mjs` | 29 项自检：schema / 继承 / 规划器（幂等、还原、外来编辑、旧行改写）/ 迁移 / client 契约 |
 | `locale/` + `locale/<组件>/` | 插件页卡片与组件行的本地化标题/描述（`{"meta":{title,description}}`） |
 
 ## 常用命令
@@ -40,7 +40,7 @@ pnpm install --ignore-scripts
 pnpm resolve-types   # 从正在运行的 DSH 安装解析类型 → .dsh-types/tsconfig.paths.json
 pnpm typecheck       # 必须 0 错误
 pnpm build           # tsdown：5 个 ESM + 1 个 CJS client
-pnpm smoke           # 28 项检查，改规划器/迁移后必跑
+pnpm smoke           # 29 项检查，改规划器/迁移/client 后必跑
 ```
 
 ## 架构要点
@@ -65,6 +65,8 @@ pnpm smoke           # 28 项检查，改规划器/迁移后必跑
 10. **停用时要精确还原 `disabled`**：从 shipped 行取该键（shipped 没有就删键，而不是写 `false`）；若「内置行被 gate 住但没有我们的行」（手工编辑/半途状态），也要还原，否则该预设会同时失去两个实现。
 11. **手改 `cordis.patch.yml` 不一定触发重载**（实测 0.1.7-rc.2 的 HMR 没反应）：验证接管逻辑请走设置页（settings remote / configForms）或重启，别手改文件后等热更新。
 12. **验证必须看真实链路**：`settings/describe` 能确认 namespace 被服务（`applies: live`、`autoGenerate: false`），`settings/mutate` 能确认写入即时生效；只用单元测试或只看 patch 文件都会漏掉接线问题（本项目就是靠这条抓出「通知没接引擎」和「HMR 嵌套」两个 bug）。
+13. **实心按钮的 hover 不能复用 `.dppBtn` 的 hover 颜色**：`dppBtnPrimary` 的背景就是 `label-primary`，而通用 hover 规则把文字也刷成 `label-primary`——同特异性下后写的规则才生效，所以实心按钮自己的 `:hover` 规则必须排在通用规则之后（否则悬停时整个按钮变成一块纯色，0.1.1 的现象）。`scripts/smoke.mjs` 有对应检查，别把顺序调回去。
+14. **启用状态靠 Host 事件刷新，且事件早于挂载**：客户端必须注入 `remote` 并 `ctx.remote.$on('plugin-manager/changed', …)` 重读 `/status`（0.1.1 只在 mount 时读一次，开关动了标签不跟着走）。事件发出时组件行**还没**完成 mount，紧跟的那次读取可能仍答 `mounted: false`（实测 activator 行在管理调用返回后约 80ms 才注册），所以 0.1.2 在 500ms / 1600ms 各补读一次——只读一次会偶发停在旧状态。
 
 ## 本地验证（一次性 scratch profile，不碰真实 profile）
 

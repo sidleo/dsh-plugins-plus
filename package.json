@@ -1,6 +1,6 @@
 {
   "name": "@sidleo3/dsh-plugins-plus",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "dsh-plugins-plus: one DSH bundle with independently switchable components that replace built-in plugins per agent preset (agent-instructions-plus, skill-filesystem-plus, ...). Configuration lives in DSH Settings; component settings inherit the global preset takeover list unless overridden.",
   "keywords": [
     "deepseek-harness",
