@@ -5,3 +5,13 @@ dist/
 .DS_Store
 *.log
 .dsh-types/
+
+# Generated evidence from the scratch-profile E2E runs (scripts/e2e/run-e2e.mjs
+# and run-deny-check.mjs rewrite these on every run; the harness itself is
+# tracked, the ~500K of raw dumps it produces is not).
+scripts/e2e/reports/
+scripts/e2e/.tmp/
+# …but the pre-fix baseline is a hand-captured fixture, not a run artifact: it
+# records the exact rejection 0.1.5 hit on DSH 0.2.0-rc.1 and cannot be
+# regenerated once the manifest is fixed.
+!scripts/e2e/baseline-install.log

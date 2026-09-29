@@ -86,8 +86,13 @@ On the next start the engine performs these steps once, recording the import as 
 
 | DSH version | Status |
 |---|---|
-| `0.1.7-rc.2` | ✅ the baseline this release was developed and verified against |
-| `0.1.7-alpha.2` and later | ✅ design target (`settings.section`, `plugins.bundle.config`, `plugins.row.config`, `ctx.configForms`, `ctx.configEditor`, `agentPresets.compositionInventory`) |
+| `0.2.0-rc.1` | ✅ verified: install gate, bundle load, real-link E2E (install → takeover → release → cleanup), client module graph |
+| `0.2.0` (stable, not yet released) | ✅ covered by the declared peer ranges |
+| `0.1.7-alpha.2` – `0.1.7-rc.2` | ✅ covered by the declared peer ranges; not re-verified in the 0.2.0 iteration |
+
+The design target is the plugin API DSH grew in the `0.1.7` line — `settings.section`, `plugins.bundle.config`, `plugins.row.config`, `ctx.configForms`, `ctx.configEditor`, `agentPresets.compositionInventory`.
+
+DSH enforces a hard compatibility gate on `peerDependencies` whose names start with `@deepseek-ai/dsh`: a range that does not satisfy the running version makes the installer **refuse** the plugin, and makes DSH **skip the whole bundle** at load time (every row, the settings section and the read-only routes disappear — the symptom is "the plugin vanished after a DSH upgrade"). The declared ranges therefore always span every supported release line. Note `^0.2.0` does **not** match `0.2.0-rc.1`, because a prerelease sorts below its release.
 
 Everything version-sensitive is kept in `src/core/` (`composition.ts`, `takeover.ts`, `hmr.ts`, `rpc.ts`) so a future DSH change has one obvious place to look.
 

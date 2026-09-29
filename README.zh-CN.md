@@ -89,8 +89,13 @@ dsh plugin --profile <profile> remove @sidleo3/skill-filesystem-plus
 
 | DSH 版本 | 状态 |
 |---|---|
-| `0.1.7-rc.2` | ✅ 本版本开发与实测的基线 |
-| `0.1.7-alpha.2` 及以后 | ✅ 设计目标（使用 `settings.section`、`plugins.bundle.config`、`plugins.row.config`、`ctx.configForms`、`ctx.configEditor`、`agentPresets.compositionInventory`） |
+| `0.2.0-rc.1` | ✅ 已实测：安装闸门、bundle 加载、真实链路 E2E（安装 → 接管 → 释放 → 清理）、客户端模块图 |
+| `0.2.0`（稳定版，尚未发布） | ✅ 已声明的 peer 范围覆盖 |
+| `0.1.7-alpha.2` – `0.1.7-rc.2` | ✅ 已声明的 peer 范围覆盖；本次 0.2.0 迭代未复测 |
+
+设计目标是 DSH 在 `0.1.7` 线上长出来的插件 API：`settings.section`、`plugins.bundle.config`、`plugins.row.config`、`ctx.configForms`、`ctx.configEditor`、`agentPresets.compositionInventory`。
+
+DSH 对名字以 `@deepseek-ai/dsh` 开头的 `peerDependencies` 有硬性兼容闸门：范围不满足运行版本时，安装器会**直接拒绝**，且加载时 DSH 会**跳过整个 bundle**（所有行、设置分区、只读路由一起消失——现象就是"DSH 升级后插件凭空不见了"）。所以声明的范围必须覆盖所有受支持的发行线。注意 `^0.2.0` **不匹配** `0.2.0-rc.1`，因为预发布版排序低于正式版。
 
 用到的 DSH 能力与版本敏感点集中在 `src/core/`（`composition.ts`、`takeover.ts`、`hmr.ts`、`rpc.ts`），DSH 再次改动时优先看这几个文件。
 

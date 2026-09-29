@@ -679,6 +679,73 @@ check('expand and collapse share one chevron glyph', () => {
   )
 })
 
+// ── Published imports ────────────────────────────────────────────────
+
+console.log('\nmanifest coverage of built imports')
+
+/** @returns the package name one bare specifier resolves through. */
+function packageOf(specifier) {
+  const parts = specifier.split('/')
+  return specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]
+}
+
+/**
+ * Bare specifiers the built halves really import — every `lib/*.js`, host,
+ * preset and browser alike. `import type` is erased before bundling, so the
+ * answer is read off the product, never off `tsdown.config.ts`: a table entry
+ * the manifest never named is exactly how both preset rows silently stopped
+ * starting, because a `link:`-installed copy only gets a `@deepseek-ai/dsh-*`
+ * specifier handed to the DSH installation when `peerDependencies` names it
+ * (AGENTS.md pitfall 20).
+ *
+ * The browser half's platform seed is not an exemption: `require` in
+ * `lib/client.js` is answered by the loader's seed, and the seed carries
+ * `react-dom` and `react/jsx-runtime` beside `react` — if one of them ever
+ * reaches the product it must be declared like any other import, so this check
+ * deliberately stays strict rather than whitelisting seeded specifiers.
+ *
+ * `readdirSync` does not recurse: `lib/` is flat today, and a future nested
+ * output (`lib/chunks/`) would have to be walked here to stay covered.
+ * @returns specifier, its package, and the product file that imports them.
+ */
+function builtImports() {
+  const found = []
+  for (const name of readdirSync(new URL('../lib', import.meta.url))) {
+    if (!name.endsWith('.js')) continue
+    const code = readFileSync(new URL(`../lib/${name}`, import.meta.url), 'utf8')
+    for (const match of code.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*|\brequire\s*\(\s*)["']([^"']+)["']/g)) {
+      const specifier = match[1]
+      // Relative paths and URL-like specifiers (`node:`, `file:`, `data:`,
+      // `http:`) are not package names; the quoted argument of a side-effect
+      // `import "pkg"` is, which is why the alternation above names it too.
+      if (specifier.startsWith('.') || specifier.startsWith('/')) continue
+      if (/^[a-z][a-z0-9+.-]*:/.test(specifier)) continue
+      found.push({ specifier, package: packageOf(specifier), file: `lib/${name}` })
+    }
+  }
+  return found
+}
+
+check('every built import is a declared dependency', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  const declared = new Set([
+    ...Object.keys(manifest.dependencies ?? {}),
+    ...Object.keys(manifest.peerDependencies ?? {}),
+  ])
+  const imports = builtImports()
+  assert.ok(imports.length > 0, 'no built import was scanned — the check is reading the wrong files')
+  const missing = [...new Set(
+    imports
+      .filter(item => !declared.has(item.package))
+      .map(item => `${item.specifier} (${item.file})`),
+  )]
+  assert.deepEqual(
+    missing,
+    [],
+    'a built import the manifest does not name cannot resolve for a link: install (pitfall 20)',
+  )
+})
+
 // ── Report ───────────────────────────────────────────────────────────
 
 console.log('')

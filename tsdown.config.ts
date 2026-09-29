@@ -30,6 +30,15 @@ const CLIENT_EXTERNALS = [
  * Getting this list wrong is silent in both directions: too short inlines a
  * second copy of a runtime package (duplicate identities, surprising weight),
  * too long leaves an import the loader cannot resolve.
+ *
+ * This table MAY name packages that only ever appear as `import type` — they are
+ * erased at build time, so listing them is harmless. The binding rule is on the
+ * BUILT PRODUCT, not on this table: every bare import that actually survives
+ * into `lib/*.js` must also be a manifest name (`peerDependencies` or
+ * `dependencies`), otherwise a `link:`-installed copy cannot resolve it and the
+ * row silently never starts (AGENTS.md pitfall 20). `scripts/smoke.mjs` asserts
+ * exactly that over `lib/*.js`, so adding a table entry here is not enough —
+ * name it in `package.json` too.
  */
 const RUNTIME_EXTERNALS = [
   ...CLIENT_EXTERNALS,
@@ -44,7 +53,6 @@ const RUNTIME_EXTERNALS = [
   '@deepseek-ai/dsh-agent-preset',
   '@deepseek-ai/dsh-agent-preset-registry',
   '@deepseek-ai/dsh-skill',
-  '@deepseek-ai/dsh-client-runtime',
 ]
 
 const hostOutput = (name, entry) => ({

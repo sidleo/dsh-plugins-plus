@@ -9,8 +9,10 @@
  * check honest — without it `tsc` reports "Cannot find module" noise that
  * masks real errors (see AGENTS.md pitfall 9 in agent-instructions-plus).
  *
- * Resolution order: the active profile (DSH sets `DSH_PROFILE_DIR`), this
- * package, then the known `dsh` CLI installation roots.
+ * Resolution order: the active profile (DSH sets `DSH_PROFILE_DIR`), the
+ * running `dsh` installation, and only then this package as a fallback —
+ * see {@link bases} for why the installation must beat the local
+ * `node_modules`.
  *
  * Run it before `tsc` (and after switching DSH installs):
  *   node scripts/resolve-dsh-types.mjs
@@ -19,7 +21,7 @@
  */
 
 import { createRequire } from 'node:module'
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -67,17 +69,27 @@ function dshInstallRoots() {
   return roots.filter(root => existsSync(join(root, 'package.json')))
 }
 
-/** Resolution bases, most specific first. */
+/**
+ * Resolution bases, most specific first.
+ *
+ * The installation that RUNS comes before this package's own `node_modules`.
+ * Ordering the other way around silently checks the source against whatever
+ * devDependency happens to be installed — a `^0.1.7` pin then reports the
+ * 0.1.7 API as green while the runtime serves 0.2.0, which is exactly how a
+ * version bump escapes a type check. The active profile stays first because
+ * `dsh` sets it and a profile may legitimately pin its own copy.
+ */
 function bases() {
   const list = []
   // The active profile is the real runtime environment: `dsh` sets this.
   if (process.env.DSH_PROFILE_DIR) {
     list.push(join(process.env.DSH_PROFILE_DIR, 'package.json'))
   }
-  // Fall back to this package, which works for a hoisted install.
-  list.push(join(packageRoot, 'package.json'))
-  // Finally the `dsh` CLI installation's own node_modules.
+  // The `dsh` installation that actually executes the plugin.
   for (const root of dshInstallRoots()) list.push(join(root, 'package.json'))
+  // Last resort: a hoisted install inside this package. The `skew` check below
+  // warns when this fallback resolves a package the installation also carries.
+  list.push(join(packageRoot, 'package.json'))
   return list
 }
 
@@ -94,6 +106,7 @@ function typeEntries(dir) {
 const paths = {}
 const missing = []
 const resolvedFrom = {}
+const versions = {}
 for (const pkg of PACKAGES) {
   let resolved = false
   for (const base of bases()) {
@@ -108,11 +121,35 @@ for (const pkg of PACKAGES) {
     if (entry === undefined) continue
     paths[pkg] = [entry]
     resolvedFrom[pkg] = dir
+    versions[pkg] = { version: JSON.parse(readFileSync(manifest, 'utf8')).version, dir }
     resolved = true
     break
   }
   if (!resolved) missing.push(pkg)
 }
+
+/** The version of the `dsh` installation that runs the plugin, or undefined. */
+const runtimeVersion = (() => {
+  for (const root of dshInstallRoots()) {
+    try {
+      return JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version
+    } catch {
+      continue
+    }
+  }
+  return undefined
+})()
+
+/**
+ * `@deepseek-ai/dsh-*` releases move in lockstep with the runtime, so a
+ * resolved type package at another version means the check is reading an API
+ * the running installation does not serve. Report it instead of passing green.
+ */
+const skew = runtimeVersion === undefined
+  ? []
+  : Object.entries(versions).filter(([pkg, info]) =>
+      pkg.startsWith('@deepseek-ai/dsh-') && pkg !== '@deepseek-ai/dsh-home-paths' && info.version !== runtimeVersion,
+    )
 
 /**
  * `@deepseek-ai/dsh-plugin-manager` and friends are reached through Loader
@@ -127,8 +164,13 @@ writeFileSync(
 )
 
 console.log(`resolve-dsh-types: ${Object.keys(paths).length}/${PACKAGES.length} resolved`)
+if (runtimeVersion !== undefined) console.log(`  dsh runtime: ${runtimeVersion}`)
 const distinctRoots = [...new Set(Object.values(resolvedFrom).map(dir => dir.replace(/\/node_modules\/.*$/, '')))]
 for (const root of distinctRoots) console.log(`  from ${root}`)
+for (const [pkg, info] of skew) {
+  console.warn(`  version skew: ${pkg}@${info.version} (runtime is ${runtimeVersion}) — types no longer match the running DSH`)
+  console.warn(`    resolved from ${info.dir}`)
+}
 if (missing.length > 0) {
   // Not fatal: a missing package only means the error for it stays a
   // "Cannot find module" instead of a real diagnostic.
