@@ -281,7 +281,16 @@ export async function reconcile(
   let written = 0
 
   for (const composition of compositions) {
-    if (composition.broken !== undefined || composition.rows.length === 0) continue
+    // A preset with no readable rows cannot be composed at all.
+    if (composition.rows.length === 0) continue
+    // A broken preset is normally none of this engine's business — except when
+    // it carries a row this bundle owns: an earlier release's pipeline row
+    // pointing at a module that no longer exists is itself the reason the
+    // preset never starts, so skipping it would leave the preset broken forever
+    // (the engine is the only thing that can rewrite that row).
+    if (composition.broken !== undefined && !rowsOf(composition.base).some(row =>
+      deps.components.some(component => ownsRow(component, row)),
+    )) continue
     const intents: ComponentIntent[] = deps.components.map(component => {
       const selection = deps.selection(component.id)
       const wanted =

@@ -38,6 +38,18 @@ function check(name, run) {
   }
 }
 
+/** Run one named check whose body returns a promise. */
+async function checkAsync(name, run) {
+  try {
+    await run()
+    passed += 1
+    console.log(`  ✓ ${name}`)
+  } catch (error) {
+    failures.push({ name, error })
+    console.log(`  ✗ ${name}\n      ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 console.log(`dsh-plugins-plus smoke test (DSH_HOME=${scratch})`)
 
 // ── Schema ───────────────────────────────────────────────────────────
@@ -339,6 +351,91 @@ check('leaves rows alone while a component has never mounted', () => {
   })
   assert.equal(unmanaged.action, 'none', 'an unmanaged pass must not touch the composition')
   assert.deepEqual(unmanaged.next, takeover.next)
+})
+
+await checkAsync('repairs a broken preset that carries an earlier release\'s pipeline row', () => {
+  // The shape that made a user's own preset unusable: the preset still names
+  // the discontinued standalone package, which is gone from the profile, so the
+  // row can never start and the registry reports the whole preset as broken.
+  // Skipping every broken preset left that row in place forever.
+  const stale = {
+    id: 'yh-standard',
+    plugins: [
+      { id: 'persona', name: '@deepseek-ai/dsh-persona' },
+      { id: 'skill-filesystem', name: '@deepseek-ai/dsh-skill-filesystem', disabled: true },
+      { id: 'skill-filesystem-plus-pipeline', name: '@sidleo3/skill-filesystem-plus/preset' },
+      { id: 'agent-instructions-plus-pipeline', name: '@sidleo3/agent-instructions-plus/preset' },
+    ],
+  }
+  const compositions = [
+    {
+      presetId: 'yh-standard',
+      rowId: 'preset-yh-standard',
+      broken: 'skill-filesystem-plus-pipeline (@sidleo3/skill-filesystem-plus/preset): never started',
+      inherited: {},
+      override: stale,
+      overridden: true,
+      base: stale,
+      rows: bundle.rowsOf(stale),
+      inheritedRows: [],
+    },
+  ]
+  const written = []
+  const owned = deps => ({
+    // The editor hands `change` the values it just read and persists what comes
+    // back, so the stub replays that contract instead of echoing the plan.
+    editor: {
+      configuration: () => [],
+      edit: async (_rowId, change) => {
+        written.push(await change(stale, {}))
+      },
+    },
+    components: bundle.COMPONENTS,
+    // Both components are mounted (the state after enabling them in Settings):
+    // a component this process never mounted is deliberately left alone, so it
+    // would not be allowed to clean up its own stale row here.
+    mounted: () => new Set(['skill-filesystem-plus', 'agent-instructions-plus']),
+    everMounted: () => new Set(['skill-filesystem-plus', 'agent-instructions-plus']),
+    selection: () => ({ mode: 'list', presets: ['yh-standard'] }),
+    ...deps,
+  })
+  return bundle.reconcile(owned({}), compositions, 'smoke').then(report => {
+    const entry = report.entries.find(item => item.presetId === 'yh-standard')
+    assert.ok(entry, 'the broken preset must still be planned')
+    assert.equal(entry.action, 'write', 'the stale row has to be rewritten')
+    assert.equal(written.length, 1, 'the repaired composition has to be persisted')
+    const ids = written[0].plugins.map(row => row.id)
+    assert.ok(!ids.includes('skill-filesystem-plus-pipeline'), 'the discontinued row must be gone')
+    assert.ok(!ids.includes('agent-instructions-plus-pipeline'), 'the discontinued row must be gone')
+    assert.ok(ids.includes('dsh-plugins-plus-skill-filesystem'), 'the current pipeline row must be present')
+  })
+})
+
+await checkAsync('still skips a broken preset this bundle owns nothing in', () => {
+  const foreign = { id: 'foreign', plugins: [{ id: 'persona', name: '@deepseek-ai/dsh-persona' }] }
+  const compositions = [
+    {
+      presetId: 'foreign',
+      rowId: 'preset-foreign',
+      broken: 'some-other-plugin: never started',
+      inherited: {},
+      override: foreign,
+      overridden: true,
+      base: foreign,
+      rows: bundle.rowsOf(foreign),
+      inheritedRows: [],
+    },
+  ]
+  const engine = {
+    editor: { configuration: () => [], edit: async () => { throw new Error('must not write'); } },
+    components: bundle.COMPONENTS,
+    mounted: () => new Set(['skill-filesystem-plus']),
+    everMounted: () => new Set(['skill-filesystem-plus']),
+    selection: () => ({ mode: 'all', presets: [] }),
+  }
+  return bundle.reconcile(engine, compositions, 'smoke').then(report => {
+    assert.equal(report.entries.length, 0, 'a foreign broken preset stays untouched')
+  })
 })
 
 check('mergeRows is a no-op when the layers agree', () => {

@@ -6,7 +6,7 @@
 
 ## 项目是什么
 
-- **包名**：`@sidleo3/dsh-plugins-plus`（v0.1.6）
+- **包名**：`@sidleo3/dsh-plugins-plus`（v0.1.8）
 - **仓库**：GitHub `sidleo/dsh-plugins-plus`（分支 `main`）
 - **组件**：`agent-instructions-plus`（替代 `agent-instructions`）、`skill-filesystem-plus`（替代 `skill-filesystem`）；命名规则 = 官方行 id + `-plus`
 - **核心行**：`dsh-plugins-plus` — 唯一常开行，持有配置 schema、接管引擎、只读状态接口
@@ -30,7 +30,7 @@
 | `src/components/agent-instructions/{discovery,files,state,render,digest,config}.ts` | 从旧包移植的注入管线实现 |
 | `src/components/skill-filesystem/{provider,watcher,config}.ts` | 从旧包移植的发现实现 |
 | `src/client/index.ts` | 浏览器半：`settings.section` + `plugins.bundle.config` + `plugins.row.config`，读写全走 `ctx.configForms`；页面只有配置，运行日志走页脚链接 |
-| `scripts/smoke.mjs` | 32 项自检：schema / 继承 / 规划器（幂等、还原、外来编辑、旧行改写）/ 迁移 / client 契约 / **产物裸导入 ⊆ manifest**（坑 20 的回归防线） |
+| `scripts/smoke.mjs` | 34 项自检：schema / 继承 / 规划器（幂等、还原、外来编辑、旧行改写）/ 迁移 / client 契约 / **产物裸导入 ⊆ manifest**（坑 20 的回归防线） |
 | `locale/` + `locale/<组件>/` | 插件页卡片与组件行的本地化标题/描述（`{"meta":{title,description}}`） |
 
 ## 常用命令
@@ -40,7 +40,7 @@ pnpm install --ignore-scripts
 pnpm resolve-types   # 从正在运行的 DSH 安装解析类型 → .dsh-types/tsconfig.paths.json
 pnpm typecheck       # 必须 0 错误
 pnpm build           # tsdown：5 个 ESM + 1 个 CJS client
-pnpm smoke           # 32 项检查，改规划器/迁移/client/依赖声明后必跑（读 lib/，先 build）
+pnpm smoke           # 34 项检查，改规划器/迁移/client/依赖声明后必跑（读 lib/，先 build）
 ```
 
 **DSH 升级后必做**（顺序不能反，否则会得到假绿）：
@@ -84,14 +84,15 @@ dsh --profile <scratch> add link:$PWD   # 安装闸门必须在真实 DSH 上过
 18. **DSH 有硬性 peer 兼容闸门，peer 范围必须覆盖运行版本**。`dsh-app-boot` 的 `evaluatePluginCompatibility`（`~/.local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:251-315`）遍历 `peerDependencies` 里**名字为 `@deepseek-ai/dsh` 或以 `@deepseek-ai/dsh-` 开头**的项，用 `semver.satisfies(runtimeVersion, range, {includePrerelease:true})` 校验。两种失败面，都要防：**(1) 安装期** —— `dsh plugin add` 直接拒绝（"installation rejected … nothing was installed"）；**(2) 加载期** —— 对**已经装好**的插件，DSH 在 profile 组装时把**整个 bundle 层**跳过：stderr 打 `dsh: skipping profile bundle "<pkg>": Error: Plugin <pkg>@<ver> is incompatible with dsh <runtime> …`。这一步发生在行级 preflight 之前，所以**不是**"某些行被 disable"，而是注入引擎、设置分区、只读路由、组件行**一起消失**（`/api/dsh-plugins-plus/status` 变 404，`settings/describe` 里没有该 namespace）。**升级 DSH 后如果整套功能凭空不见，先查这个**。复现脚本：`node scripts/e2e/run-deny-check.mjs`（9 项断言，含"豁免生效时不会 deny，必须先撤销豁免再启动"这个坑）。
     两个易错点：**(a)** `^0.2.0` **不匹配** `0.2.0-rc.1`（rc < 0.2.0），要写 `^0.2.0-rc.1`；**(b)** `@deepseek-ai/cordis`、`@deepseek-ai/schemastery` 不以 `dsh-` 开头，不参与判定，别指望它们挡住版本错配。0.1.5 → 0.2.0-rc.1 的迭代就是栽在这里（peer 还写着 `^0.1.7-alpha.2`）。另外 `@deepseek-ai/dsh-client-runtime` **没有 0.2.0 线的版本**（npm 上最新只到 0.1.1-rc.2，且不在 0.2.0-rc.1 的运行时依赖树里），别再往 peer/dev/`dsh.client.inject` 里写；注意闸门只校验**范围**、不校验包是否存在，所以写回一个不存在的包不会报错，只会让行静默失效。豁免（`dsh plugin allow-version` / `compatibility.json`）能救急，但等于放弃保护，正式发布必须靠改范围解决。
 19. **`resolve-dsh-types.mjs` 的解析顺序决定 typecheck 是不是假绿**：旧顺序把本包 `package.json` 排在 DSH 安装**之前**，于是 devDependency 钉在 `^0.1.7` 时 `tsc` 一直拿 0.1.7 的类型对着 0.2.0 运行时校验，报 0 错误——升级完全没被发现。现在顺序是 **profile → DSH 安装 → 本包（兜底）**，并打印 `dsh runtime: <版本>` 与 `version skew` 警告。**`pnpm typecheck` 前务必确认输出里的 runtime 版本等于 `dsh --version`**。注意 TS 的 `paths` 映射失败会**静默回退**到 node_modules，所以「映射写错」不会报错，要查就得用 `tsc --traceResolution` 看它实际解析到了哪个文件。
-20. **构建产物里 external 的每个裸导入，都必须在 `peerDependencies` 里点名，否则 `link:` 安装的插件会静默失效**。机制在 `dsh-app-boot`：`routeLinked`（0.2.0-rc.1 约 1469-1481 行，**0.1.7-rc.1 起就有且逐字节相同**）对 linked 插件逐级看祖先 `node_modules`，只有 `readPeerNames(directory).has(name)`（1224-1231，**读的就是 `peerDependencies`**）成立才给 `kind:'interception'` 交给 DSH 安装；否则退 native 解析——而从插件的 `lib/` 往上根本找不到 `@deepseek-ai/dsh-*`。**注意作用范围**：走 **profile 层**（registry 安装，`node_modules` 里是真目录）的插件不受影响——那条路径下 `routeLocalPackage` 只要本层没有本地候选就直接用安装提供；只有 `link:`（symlink）安装才会踩到。后果是**静默**的：preset 平面那行永远不启动，`compositionInventory()` 把它报成 `broken: "…: never started"`，`takeover.ts:284` 于是跳过该预设 → **接管永远释放不掉**；更糟的是内置行已被 gate 成 `disabled: true`，于是那个预设**一个指令注入源都没有**。自检命令：
+20. **构建产物里 external 的每个裸导入，都必须在 `peerDependencies` 里点名，否则 `link:` 安装的插件会静默失效**。机制在 `dsh-app-boot`：`routeLinked`（0.2.0-rc.1 约 1469-1481 行，**0.1.7-rc.1 起就有且逐字节相同**）对 linked 插件逐级看祖先 `node_modules`，只有 `readPeerNames(directory).has(name)`（1224-1231，**读的就是 `peerDependencies`**）成立才给 `kind:'interception'` 交给 DSH 安装；否则退 native 解析——而从插件的 `lib/` 往上根本找不到 `@deepseek-ai/dsh-*`。**注意作用范围**：走 **profile 层**（registry 安装，`node_modules` 里是真目录）的插件不受影响——那条路径下 `routeLocalPackage` 只要本层没有本地候选就直接用安装提供；只有 `link:`（symlink）安装才会踩到。后果是**静默**的：preset 平面那行永远不启动，`compositionInventory()` 把它报成 `broken: "…: never started"`，引擎于是跳过该预设（→ 坑 22） → **接管永远释放不掉**；更糟的是内置行已被 gate 成 `disabled: true`，于是那个预设**一个指令注入源都没有**。自检命令：
     ```bash
     # 构建产物里所有裸导入（不含 node: 与相对路径）
     grep -ho 'from "[^".][^"]*"' lib/*.js | sed 's/from "//;s/"//' | grep -v '^node:' | sort -u
     # 逐个确认：是 peerDependencies 的 key，或是 dependencies（能原生解析）
     ```
     **判据落在产物上，不在 `RUNTIME_EXTERNALS` 表上**：该表 12 项里只有 3 项（`dsh-llm`/`chokidar`/`yaml`）真出现在 `lib/*.js`，其余是 `import type`、构建时被擦除（`cordis` 由 `CLIENT_EXTERNALS` 展开进来）。按表核会得到一堆假阳性，只看表又会漏掉缺声明——「表里有、manifest 里没有」正是坑 20 的形态。这条已固化进 `pnpm smoke`（`manifest coverage of built imports`），改完依赖声明跑一次即可。**另一个方向的红线：别在 profile 里单独装 `@deepseek-ai/dsh-llm`**——profile 层的 `localPackageCandidate` 优先于 interception，装了就换成那份副本，`createUserMessage`/`Message` 的运行时身份与 DSH 内部不再是同一份（即坑 1 的复制身份问题）。profile 模板默认 `autoInstallPeers: false`，正常路径不会自动触发。
-21. **`presets[].broken` 是"替代实现到底有没有真的起来"的唯一信号**。`@deepseek-ai/dsh-agent-preset-registry` 的 `compositionInventory()` 会挂载预设子树并审计每一行；`fiber === undefined` 就报 `never started`（该严重情况**不**区分"导入失败"与"依赖未满足"，因为只有拿到 fiber 的行才会继续等 `inject`）。它同时是引擎的门：`takeover.ts:284` 见到 `broken !== undefined` 直接 `continue`。所以**改完 preset 平面必须查它**：`GET /api/dsh-plugins-plus/status` 的 `presets[].broken` 必须是 undefined。单元测试、`settings/describe`、甚至"接管写盘成功"全都不会发现这一类失败——0.2.0-rc.1 的迭代就是靠它才抓到坑 20。
+21. **`presets[].broken` 是"替代实现到底有没有真的起来"的唯一信号**。`@deepseek-ai/dsh-agent-preset-registry` 的 `compositionInventory()` 会挂载预设子树并审计每一行；`fiber === undefined` 就报 `never started`（该严重情况**不**区分"导入失败"与"依赖未满足"，因为只有拿到 fiber 的行才会继续等 `inject`）。它同时是引擎的门：`reconcile` 见到 `broken !== undefined` 就 `continue`（坑 22 说明为什么不能无条件跳过）。所以**改完 preset 平面必须查它**：`GET /api/dsh-plugins-plus/status` 的 `presets[].broken` 必须是 undefined。单元测试、`settings/describe`、甚至"接管写盘成功"全都不会发现这一类失败——0.2.0-rc.1 的迭代就是靠它才抓到坑 20。
+22. **引擎不能无条件跳过 broken 预设，否则自己的旧行永远修不掉**。0.1.7 及更早的 `reconcile` 是 `if (broken !== undefined || rows.length === 0) continue`：只要预设 broken 就整条略过。而「旧版遗留的 pipeline 行指向已下架的旧包」恰恰**就是**某些自有预设 broken 的原因——`@sidleo3/skill-filesystem-plus/preset`、`@sidleo3/agent-instructions-plus/preset` 在旧包被移除后 import 必失败，`compositionInventory()` 报 `never started`。于是形成死锁：预设 broken → 引擎跳过 → 旧行没人改 → 预设永远 broken。现象是用户在 DSH Plus 里**勾不上自己的预设**（列表显示"预设不可用：…never started"），而 DSH 自带的 preset 一切正常。0.1.8 起改为：`rows.length === 0` 仍然跳过；`broken` 只在**预设里没有任何本插件拥有的行**（`ownsRow` 命中 `pipelineRowId`/`legacyPipelineRowIds`/`legacyPipelineModules`）时才跳过。判据是"这条 broken 是不是我造成的"，不是"这条预设坏没坏"。`pnpm smoke` 有两条回归用例（修复与本插件无关的 broken 预设保持不动）。注意前提：组件必须**已挂载**（`manageable`）引擎才会动它的行，所以用户侧的修复步骤是「启用组件 → 勾选预设」，只勾选不启用不会生效。
 
 ## 本地验证（一次性 scratch profile，不碰真实 profile）
 
