@@ -1,6 +1,6 @@
 {
   "name": "@sidleo3/dsh-plugins-plus",
-  "version": "0.1.8",
+  "version": "0.2.0",
   "description": "dsh-plugins-plus: one DSH bundle with independently switchable components that replace built-in plugins per agent preset (agent-instructions-plus, skill-filesystem-plus, ...). Configuration lives in DSH Settings; component settings inherit the global preset takeover list unless overridden.",
   "keywords": [
     "deepseek-harness",
@@ -85,11 +85,11 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
-    "@deepseek-ai/dsh-agent-preset": "^0.1.7-alpha.2 || ^0.2.0-rc.1",
-    "@deepseek-ai/dsh-agent-preset-registry": "^0.1.7-alpha.2 || ^0.2.0-rc.1",
-    "@deepseek-ai/dsh-client-ui-slots": "^0.1.7-alpha.2 || ^0.2.0-rc.1",
-    "@deepseek-ai/dsh-llm": "^0.1.7-alpha.2 || ^0.2.0-rc.1",
-    "@deepseek-ai/dsh-skill": "^0.1.7-alpha.2 || ^0.2.0-rc.1",
+    "@deepseek-ai/dsh-agent-preset": "^0.1.7-alpha.2 || ^0.2.0-rc.2",
+    "@deepseek-ai/dsh-agent-preset-registry": "^0.1.7-alpha.2 || ^0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.7-alpha.2 || ^0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm": "^0.1.7-alpha.2 || ^0.2.0-rc.2",
+    "@deepseek-ai/dsh-skill": "^0.1.7-alpha.2 || ^0.2.0-rc.2",
     "@deepseek-ai/schemastery": "^3.18.4",
     "react": "^18.2.0"
   },
@@ -125,10 +125,10 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
-    "@deepseek-ai/dsh-agent-preset": "^0.2.0-rc.1",
-    "@deepseek-ai/dsh-agent-preset-registry": "^0.2.0-rc.1",
-    "@deepseek-ai/dsh-client-ui-slots": "^0.2.0-rc.1",
-    "@deepseek-ai/dsh-skill": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-agent-preset": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-agent-preset-registry": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-skill": "^0.2.0-rc.2",
     "@deepseek-ai/schemastery": "^3.18.4",
     "@types/node": "^22.20.0",
     "@types/react": "~18.3.1",

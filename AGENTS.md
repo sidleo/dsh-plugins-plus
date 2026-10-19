@@ -6,7 +6,7 @@
 
 ## 项目是什么
 
-- **包名**：`@sidleo3/dsh-plugins-plus`（v0.1.8）
+- **包名**：`@sidleo3/dsh-plugins-plus`（v0.2.0）
 - **仓库**：GitHub `sidleo/dsh-plugins-plus`（分支 `main`）
 - **组件**：`agent-instructions-plus`（替代 `agent-instructions`）、`skill-filesystem-plus`（替代 `skill-filesystem`）；命名规则 = 官方行 id + `-plus`
 - **核心行**：`dsh-plugins-plus` — 唯一常开行，持有配置 schema、接管引擎、只读状态接口
@@ -82,7 +82,7 @@ dsh --profile <scratch> add link:$PWD   # 安装闸门必须在真实 DSH 上过
 16. **host 半边只在启动时加载**：浏览器半边按请求从磁盘读（刷新即新），host 半边是启动时 import 的（改路由/引擎必须重启 DSH）。所以新增 host 路由的功能要能容忍旧 host：0.1.5 的日志浮层在 `/log` 404 时回落到 `/status` 里的最近一次接管与迁移结果，并提示重启。
 17. **卡片展开/收起必须用同一个图标旋转**：`⌃`(U+2303) 与 `⌄`(U+2304) 是两个不同字形，字重与基线都不同，展开/收起看起来不对称（0.1.2 的现象）。改成单个 SVG chevron + `.dppChevronOpen{transform:rotate(180deg)}`，两态才是严格镜像；`scripts/smoke.mjs` 有对应检查。
 18. **DSH 有硬性 peer 兼容闸门，peer 范围必须覆盖运行版本**。`dsh-app-boot` 的 `evaluatePluginCompatibility`（`~/.local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:251-315`）遍历 `peerDependencies` 里**名字为 `@deepseek-ai/dsh` 或以 `@deepseek-ai/dsh-` 开头**的项，用 `semver.satisfies(runtimeVersion, range, {includePrerelease:true})` 校验。两种失败面，都要防：**(1) 安装期** —— `dsh plugin add` 直接拒绝（"installation rejected … nothing was installed"）；**(2) 加载期** —— 对**已经装好**的插件，DSH 在 profile 组装时把**整个 bundle 层**跳过：stderr 打 `dsh: skipping profile bundle "<pkg>": Error: Plugin <pkg>@<ver> is incompatible with dsh <runtime> …`。这一步发生在行级 preflight 之前，所以**不是**"某些行被 disable"，而是注入引擎、设置分区、只读路由、组件行**一起消失**（`/api/dsh-plugins-plus/status` 变 404，`settings/describe` 里没有该 namespace）。**升级 DSH 后如果整套功能凭空不见，先查这个**。复现脚本：`node scripts/e2e/run-deny-check.mjs`（9 项断言，含"豁免生效时不会 deny，必须先撤销豁免再启动"这个坑）。
-    两个易错点：**(a)** `^0.2.0` **不匹配** `0.2.0-rc.1`（rc < 0.2.0），要写 `^0.2.0-rc.1`；**(b)** `@deepseek-ai/cordis`、`@deepseek-ai/schemastery` 不以 `dsh-` 开头，不参与判定，别指望它们挡住版本错配。0.1.5 → 0.2.0-rc.1 的迭代就是栽在这里（peer 还写着 `^0.1.7-alpha.2`）。另外 `@deepseek-ai/dsh-client-runtime` **没有 0.2.0 线的版本**（npm 上最新只到 0.1.1-rc.2，且不在 0.2.0-rc.1 的运行时依赖树里），别再往 peer/dev/`dsh.client.inject` 里写；注意闸门只校验**范围**、不校验包是否存在，所以写回一个不存在的包不会报错，只会让行静默失效。豁免（`dsh plugin allow-version` / `compatibility.json`）能救急，但等于放弃保护，正式发布必须靠改范围解决。
+    三个易错点：**(a)** `^0.2.0` **不匹配** `0.2.0-rc.1`（rc < 0.2.0），要写 `^0.2.0-rc.1`；**(c)** 预发布版之间不互相覆盖——`^0.2.0-rc.1` 只接受 `>=0.2.0-rc.1 <0.2.0` 的预发布版，**不含** `0.2.0-rc.2`（rc.2 > rc.1，超出上界）。运行版本升到 `rc.N`，peer/dev 必须同步改成 `^0.2.0-rc.N`，实测 `semver.satisfies('0.2.0-rc.2','^0.1.7-alpha.2 || ^0.2.0-rc.1',{includePrerelease:true})` 为 **false**；**(b)** `@deepseek-ai/cordis`、`@deepseek-ai/schemastery` 不以 `dsh-` 开头，不参与判定，别指望它们挡住版本错配。0.1.5 → 0.2.0-rc.1 的迭代就是栽在这里（peer 还写着 `^0.1.7-alpha.2`）。另外 `@deepseek-ai/dsh-client-runtime` **没有 0.2.0 线的版本**（npm 上最新只到 0.1.1-rc.2，且不在 0.2.0-rc.1 的运行时依赖树里），别再往 peer/dev/`dsh.client.inject` 里写；注意闸门只校验**范围**、不校验包是否存在，所以写回一个不存在的包不会报错，只会让行静默失效。豁免（`dsh plugin allow-version` / `compatibility.json`）能救急，但等于放弃保护，正式发布必须靠改范围解决。
 19. **`resolve-dsh-types.mjs` 的解析顺序决定 typecheck 是不是假绿**：旧顺序把本包 `package.json` 排在 DSH 安装**之前**，于是 devDependency 钉在 `^0.1.7` 时 `tsc` 一直拿 0.1.7 的类型对着 0.2.0 运行时校验，报 0 错误——升级完全没被发现。现在顺序是 **profile → DSH 安装 → 本包（兜底）**，并打印 `dsh runtime: <版本>` 与 `version skew` 警告。**`pnpm typecheck` 前务必确认输出里的 runtime 版本等于 `dsh --version`**。注意 TS 的 `paths` 映射失败会**静默回退**到 node_modules，所以「映射写错」不会报错，要查就得用 `tsc --traceResolution` 看它实际解析到了哪个文件。
 20. **构建产物里 external 的每个裸导入，都必须在 `peerDependencies` 里点名，否则 `link:` 安装的插件会静默失效**。机制在 `dsh-app-boot`：`routeLinked`（0.2.0-rc.1 约 1469-1481 行，**0.1.7-rc.1 起就有且逐字节相同**）对 linked 插件逐级看祖先 `node_modules`，只有 `readPeerNames(directory).has(name)`（1224-1231，**读的就是 `peerDependencies`**）成立才给 `kind:'interception'` 交给 DSH 安装；否则退 native 解析——而从插件的 `lib/` 往上根本找不到 `@deepseek-ai/dsh-*`。**注意作用范围**：走 **profile 层**（registry 安装，`node_modules` 里是真目录）的插件不受影响——那条路径下 `routeLocalPackage` 只要本层没有本地候选就直接用安装提供；只有 `link:`（symlink）安装才会踩到。后果是**静默**的：preset 平面那行永远不启动，`compositionInventory()` 把它报成 `broken: "…: never started"`，引擎于是跳过该预设（→ 坑 22） → **接管永远释放不掉**；更糟的是内置行已被 gate 成 `disabled: true`，于是那个预设**一个指令注入源都没有**。自检命令：
     ```bash
@@ -102,7 +102,8 @@ dsh plugin --profile smoke add link:$PWD
 dsh --profile smoke --port 5399 --no-open     # 后台起，日志里取 token
 # 取 cookie 后即可调真实 remote：
 #   POST /api/settings/describe      {"args":{}}
-#   POST /api/settings/mutate        {"args":{"ns":"dsh-plugins-plus","ops":[…],"expectedRevision":N}}
+#   POST /api/settings/mutate        {"args":{"ns":"dsh-plugins-plus","ops":[{"op":"set","path":["presets"],"value":["standard"]}],"expectedRevision":N}}
+#     ops 每项是 {op,path,value}（path 是数组）；只传 key/value 会被 wire 校验拒为 input-invalid
 #   POST /api/pluginManager/setPluginEnabled {"args":{"id":"include:skill-filesystem-plus","enabled":false}}
 #   GET  /api/dsh-plugins-plus/status|log        POST /api/dsh-plugins-plus/reconcile
 ```
